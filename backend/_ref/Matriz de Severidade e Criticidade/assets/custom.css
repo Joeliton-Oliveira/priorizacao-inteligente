@@ -1,0 +1,107 @@
+/* Matriz de Priorização de Requisitos — Design System */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* Variáveis e base */
+:root {
+  --color-bg: #f1f5f9;
+  --color-surface: #ffffff;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-text: #1e293b;
+  --color-text-muted: #64748b;
+  --color-border: #e2e8f0;
+  --color-error: #dc2626;
+  --color-success: #16a34a;
+  --color-bug: #dc2626;
+  --color-feature: #2563eb;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Tipografia */
+body {
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--color-text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Inputs e controles */
+.Select-control,
+input[type="text"],
+textarea {
+  border-radius: var(--radius) !important;
+  border-color: var(--color-border) !important;
+  transition: border-color 0.2s, box-shadow 0.2s !important;
+}
+
+.Select-control:focus,
+.Select--multi.is-focused .Select-control,
+input[type="text"]:focus,
+textarea:focus {
+  border-color: var(--color-primary) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
+}
+
+/* Botões */
+.dash-button {
+  transition: background-color 0.2s, transform 0.05s;
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+.dash-button:hover {
+  background-color: var(--color-primary-hover) !important;
+}
+
+.dash-button:active {
+  transform: scale(0.98);
+}
+
+/* Radio items mais legíveis */
+.RadioItems-inline ._label {
+  margin-right: 1rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  transition: background-color 0.15s;
+}
+
+.RadioItems-inline ._label:hover {
+  background-color: rgba(37, 99, 235, 0.06);
+}
+
+/* Cards e seções */
+.dash-card {
+  box-shadow: var(--shadow-md);
+  transition: box-shadow 0.2s;
+}
+
+.dash-card:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+/* Animações suaves */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+  body {
+    padding: 0 1rem;
+  }
+}
