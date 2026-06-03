@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.env
+.venv
+venv/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# Node (se houver)
+node_modules/
+dist/
+
+# Python tooling
+.mypy_cache/
+.pytest_cache/
+pytest_cache/
+.coverage
+htmlcov/
+
+# Editor/config locais
+.vscode/
+.idea/
+*.code-workspace
+
+# Arquivos sensíveis
+config_fila.json

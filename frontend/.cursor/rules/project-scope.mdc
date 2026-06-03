@@ -1,0 +1,16 @@
+---
+description: Escopo do frontend atual — editar só esta pasta
+globs: "**/*"
+alwaysApply: true
+---
+
+# frontend
+
+Ao trabalhar neste projeto:
+
+- **Criar arquivos** apenas dentro de `frontend/`.
+- **Editar arquivos** apenas dentro de `frontend/` (não alterar backend ou outros projetos sem pedido explícito).
+- **Dependências:** usar `pnpm` na raiz desta pasta; o store fica em `.pnpm-store` (configurado em `.npmrc`).
+- Comandos (`pnpm install`, `pnpm dev`, etc.) devem ser executados com `cd frontend`.
+
+Exceção: só sair desta pasta se o usuário pedir explicitamente integração com outro serviço ou repositório.
