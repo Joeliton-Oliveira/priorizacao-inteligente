@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { QUADRANT_CUTOFF } from "./matrix-quadrants";
 import type { MatrixQuadrantConfig } from "./matrix-chart-quadrants";
 import { DashboardPanel, DashboardPanelHeader } from "./dashboard-panel";
-import type { MatrixPoint } from "./mock-matrix-data";
+import type { MatrixPoint } from "@/lib/priorizacao/types";
 
 const AXIS_DOMAIN: [number, number] = [0, 5];
 const AXIS_TICKS = [0, 1, 2, 3, 4, 5];

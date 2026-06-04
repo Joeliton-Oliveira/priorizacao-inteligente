@@ -7,3 +7,7 @@ __pycache__
 *.pyd
 .env
 .env.*
+tests/
+db/seed_*.py
+*.csv
+README.md

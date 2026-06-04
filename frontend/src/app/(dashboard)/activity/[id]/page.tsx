@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   Brain,
@@ -55,7 +55,12 @@ import { Button } from "@/components/ui/button";
 import { CustomModal } from "@/components/ui/CustomModal";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { postKanbanStatus, tentarAvancoAutomaticoKanban } from "@/lib/priorizacao/kanban-auto-advance";
+import {
+  postKanbanStatus,
+  reportKanbanAdvanceFeedback,
+  tentarAvancoAutomaticoKanban,
+} from "@/lib/priorizacao/kanban-auto-advance";
+import { toast } from "sonner";
 import {
   documentationPhaseToColumn,
   statusToColumn,
@@ -211,7 +216,8 @@ export default function ActivityDetailPage() {
   const [view360, setView360] = useState<Visao360DemandaResponse | null>(null);
   const [activePhase, setActivePhase] = useState<DocumentationFillPhaseId | null>(null);
   const [reopenedPhase, setReopenedPhase] = useState<DocumentationPhaseKey | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  /** Força remontagem do formulário após reabrir/limpar etapa (estado local não acompanha o fetch). */
+  const [formSessionKey, setFormSessionKey] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -304,19 +310,14 @@ export default function ActivityDetailPage() {
     try {
       setIsSaving(true);
       setErrorMessage(null);
-      setMessage(null);
       await persistPhaseContent(phaseCode, conteudo);
-      const advance = await tentarAvancoAutomaticoKanban(activityId, { maxSteps: 1 });
-      setMessage(
-        advance.stepsCompleted > 0
-          ? `${successMessage} Esteira atualizada.`
-          : successMessage,
-      );
+      const advance = await tentarAvancoAutomaticoKanban(activityId, { maxSteps: 1, silent: true });
+      reportKanbanAdvanceFeedback(advance, successMessage);
       setActivePhase(null);
       setReopenedPhase(null);
       await loadDetail();
     } catch (error) {
-      setErrorMessage(
+      toast.error(
         error instanceof Error ? error.message : "Não foi possível guardar a fase documental.",
       );
     } finally {
@@ -330,7 +331,6 @@ export default function ActivityDetailPage() {
     try {
       setIsSaving(true);
       setErrorMessage(null);
-      setMessage(null);
       if (
         !isBugRequirement &&
         !backlogPassesGate(docs.backlog, { dispensarDocRequisito: false })
@@ -355,17 +355,15 @@ export default function ActivityDetailPage() {
       if (!docs.encerramento?.trim()) {
         await persistPhaseContent("encerramento", buildMarcarComoFeitoEncerramento(docs.encerramento));
       }
-      const advance = await tentarAvancoAutomaticoKanban(activityId, { maxSteps: 5 });
-      setMessage(
-        advance.stepsCompleted > 0
-          ? `Documentação gravada. Esteira avançou ${advance.stepsCompleted} coluna(s).`
-          : "Documentação gravada. Avanço na esteira bloqueado (gate ou WIP) — veja o aviso.",
-      );
+      const advance = await tentarAvancoAutomaticoKanban(activityId, { maxSteps: 5, silent: true });
+      reportKanbanAdvanceFeedback(advance, "Documentação gravada.", {
+        blockedHint: "Documentação gravada. Avanço na esteira bloqueado (gate ou WIP).",
+      });
       setActivePhase(null);
       setReopenedPhase(null);
       await loadDetail();
     } catch (error) {
-      setErrorMessage(
+      toast.error(
         error instanceof Error ? error.message : "Não foi possível completar a documentação.",
       );
     } finally {
@@ -386,13 +384,33 @@ export default function ActivityDetailPage() {
     dispensarBacklogDoc: isBugRequirement,
   });
 
+  const handleCancelFill = useCallback(() => {
+    const phase = activePhase;
+    const isReopenFlow =
+      Boolean(phase) &&
+      reopenedPhase === phase &&
+      (phase === "backlog" || phase === "test");
+
+    setActivePhase(null);
+
+    if (!isReopenFlow) {
+      setReopenedPhase(null);
+      return;
+    }
+
+    setFormSessionKey((key) => key + 1);
+    requestAnimationFrame(() => {
+      setActivePhase(phase);
+    });
+  }, [activePhase, reopenedPhase]);
+
   const handleReabrirFase = async (phase: DocumentationPhaseKey) => {
     const raw = getPhaseCompletionMap(documentationCompletionInput(), phaseFlowOptions());
     const phasesToClear = getPhasesToClear(phase, raw);
     try {
       setIsSaving(true);
       setErrorMessage(null);
-      setMessage(null);
+      setActivePhase(null);
       for (const key of phasesToClear) {
         const conteudo = serializeClearPhaseContent(key, activityId);
         const response = await fetch(
@@ -428,21 +446,24 @@ export default function ActivityDetailPage() {
           ? "Etapa limpa. As fases afetadas voltaram para pendente."
           : "Etapa reaberta. As fases posteriores voltaram para pendente.";
 
-      setMessage(
-        targetColumn !== currentColumn
-          ? `${docMessage} Card movido para ${targetColumn} no Kanban.`
-          : docMessage,
-      );
+      await loadDetail();
+      setFormSessionKey((key) => key + 1);
+
+      toast.success(docMessage, {
+        description:
+          targetColumn !== currentColumn
+            ? `Card movido para ${targetColumn} no Kanban.`
+            : undefined,
+      });
+
       if (phase === "backlog" || phase === "test") {
         setReopenedPhase(phase);
         setActivePhase(phase);
       } else {
         setReopenedPhase(null);
-        setActivePhase(null);
       }
-      await loadDetail();
     } catch (error) {
-      setErrorMessage(
+      toast.error(
         error instanceof Error ? error.message : "Não foi possível reabrir a etapa.",
       );
     } finally {
@@ -464,7 +485,6 @@ export default function ActivityDetailPage() {
     try {
       setIsSaving(true);
       setErrorMessage(null);
-      setMessage(null);
 
       const input = documentationCompletionInput();
       if (
@@ -482,7 +502,7 @@ export default function ActivityDetailPage() {
         dispensarBacklogDoc: isBugRequirement,
       });
       if (!canMarkPhaseComplete(phase, raw)) {
-        setErrorMessage(
+        toast.error(
           getDependencyHint(phase, raw) ?? "Conclua as etapas anteriores antes de avançar.",
         );
         return;
@@ -507,17 +527,13 @@ export default function ActivityDetailPage() {
         await persistPhaseContent("encerramento", texto);
       }
 
-      const advance = await tentarAvancoAutomaticoKanban(activityId, { maxSteps: 1 });
-      setMessage(
-        advance.stepsCompleted > 0
-          ? "Fase gravada e esteira atualizada."
-          : "Fase gravada no banco de dados.",
-      );
+      const advance = await tentarAvancoAutomaticoKanban(activityId, { maxSteps: 1, silent: true });
+      reportKanbanAdvanceFeedback(advance, "Fase gravada no banco de dados.");
       setActivePhase(null);
       setReopenedPhase(null);
       await loadDetail();
     } catch (error) {
-      setErrorMessage(
+      toast.error(
         error instanceof Error ? error.message : "Não foi possível marcar a fase como feita.",
       );
     } finally {
@@ -530,31 +546,36 @@ export default function ActivityDetailPage() {
     if (activePhase === "backlog") {
       return (
         <BacklogPhaseFillForm
+          key={`backlog-${formSessionKey}`}
           initial={docs.backlog}
           requirementType={requirementType}
           onSave={(value) => void handleSavePhase("doc_requisito", serializeBacklogDocumentacao(value))}
-          onCancel={() => {
-            setActivePhase(null);
-            setReopenedPhase(null);
-          }}
+          onCancel={handleCancelFill}
         />
       );
     }
     if (activePhase === "test") {
       return (
         <TestPhaseFillForm
+          key={`test-${formSessionKey}`}
           cardId={String(activityId)}
           initial={docs.test}
           onSave={(value) => void handleSavePhase("casos_teste", serializeTestDocumentacao(value, activityId))}
-          onCancel={() => {
-            setActivePhase(null);
-            setReopenedPhase(null);
-          }}
+          onCancel={handleCancelFill}
         />
       );
     }
     return null;
-  }, [activePhase, activityId, docs, isSaving, view360]);
+  }, [
+    activePhase,
+    activityId,
+    docs,
+    formSessionKey,
+    handleCancelFill,
+    isSaving,
+    requirementType,
+    view360,
+  ]);
   const fillTitle = activePhase ? FILL_PHASE_TITLES[activePhase] : undefined;
 
   if (isLoading) {
@@ -606,18 +627,6 @@ export default function ActivityDetailPage() {
           </p>
         </div>
       </div>
-
-      {message ? (
-        <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
-          {message}
-        </p>
-      ) : null}
-
-      {errorMessage ? (
-        <p className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-red-400">
-          {errorMessage}
-        </p>
-      ) : null}
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <DashboardPanel className="overflow-hidden border-blue-500/10">
@@ -844,7 +853,6 @@ export default function ActivityDetailPage() {
         onOpenChange={(nextOpen) => {
           if (!nextOpen) {
             setActivePhase(null);
-            setReopenedPhase(null);
           }
         }}
         title={fillTitle ?? "Documentação"}

@@ -7,7 +7,6 @@ import pytest
 from fila_priorizacao import (
     montar_fila,
     montar_duas_filas_completas,
-    FAIXA_LIMITES,
     _dias_parado,
     _score_faixa,
 )

@@ -29,17 +29,6 @@ def obter_fila_priorizacao(
     return [serialize_fila_item(item) for item in fila]
 
 
-def obter_fila_duas_separadas() -> dict[str, list[dict[str, Any]]]:
-    config = get_config_fila()
-    itens = listar_atividades_para_fila()
-    bugs, incrementos = montar_duas_filas_completas(itens, config)
-    return {
-        "bugs": [serialize_fila_item(x) for x in bugs],
-        "features": [serialize_fila_item(x) for x in incrementos],
-        "incrementos": [serialize_fila_item(x) for x in incrementos],
-    }
-
-
 def obter_fila_bugs() -> list[dict[str, Any]]:
     config = get_config_fila()
     itens = listar_atividades_para_fila()

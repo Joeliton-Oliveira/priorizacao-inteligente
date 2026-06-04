@@ -24,6 +24,7 @@ import type {
   ProjetoStatus,
   ProjetoTipoOrigem,
 } from "@/lib/priorizacao/types";
+import { toast } from "sonner";
 
 type ModalMode = "create" | "status" | "version" | "history" | null;
 
@@ -87,7 +88,6 @@ export default function ProjectsPage() {
   const [versionReason, setVersionReason] = useState("");
   const [versionUser, setVersionUser] = useState("");
   const [statusValue, setStatusValue] = useState<ProjetoStatus>("ativo");
-  const [feedback, setFeedback] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -167,10 +167,9 @@ export default function ProjectsPage() {
   };
 
   const refreshAndClose = async (message: string) => {
-    setFeedback(message);
+    toast.success(message);
     closeModal();
     await loadProjects();
-    window.setTimeout(() => setFeedback(null), 4000);
   };
 
   const handleCreate = async () => {
@@ -192,7 +191,7 @@ export default function ProjectsPage() {
       }
       await refreshAndClose("Projeto cadastrado com sucesso.");
     } catch (error) {
-      setErrorMessage(
+      toast.error(
         error instanceof Error ? error.message : "Não foi possível cadastrar o projeto.",
       );
     } finally {
@@ -219,7 +218,7 @@ export default function ProjectsPage() {
       }
       await refreshAndClose("Status do projeto atualizado.");
     } catch (error) {
-      setErrorMessage(
+      toast.error(
         error instanceof Error ? error.message : "Não foi possível alterar o status do projeto.",
       );
     } finally {
@@ -250,7 +249,7 @@ export default function ProjectsPage() {
       }
       await refreshAndClose("Versão do projeto atualizada.");
     } catch (error) {
-      setErrorMessage(
+      toast.error(
         error instanceof Error ? error.message : "Não foi possível evoluir a versão do projeto.",
       );
     } finally {
@@ -318,12 +317,6 @@ export default function ProjectsPage() {
             Cadastrar novo projeto
           </Button>
         </div>
-
-        {feedback ? (
-          <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
-            {feedback}
-          </p>
-        ) : null}
 
         {errorMessage && modalMode === null ? (
           <p className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-red-400">

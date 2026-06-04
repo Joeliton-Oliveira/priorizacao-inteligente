@@ -67,6 +67,43 @@ function notifyGateBlocked(gates: KanbanGatesResponse) {
   });
 }
 
+/** Feedback unificado após avanço silencioso (evita toast duplicado na página). */
+export function reportKanbanAdvanceFeedback(
+  advance: AutoAdvanceResult,
+  successTitle: string,
+  options?: { blockedHint?: string },
+) {
+  if (advance.stepsCompleted > 0) {
+    toast.success(successTitle, {
+      description:
+        advance.stepsCompleted === 1
+          ? "Esteira atualizada."
+          : `Esteira avançou ${advance.stepsCompleted} colunas.`,
+    });
+    return;
+  }
+
+  toast.success(successTitle);
+
+  if (advance.stopped === "gate" && advance.gates) {
+    notifyGateBlocked(advance.gates);
+    return;
+  }
+  if (advance.stopped === "wip" && advance.gates) {
+    notifyWipBlocked(advance.gates);
+    return;
+  }
+  if (advance.stopped === "error" && advance.detail) {
+    toast.error("Não foi possível atualizar a esteira", { description: advance.detail });
+    return;
+  }
+  if (advance.stopped === "gate" || advance.stopped === "wip") {
+    toast.warning(
+      options?.blockedHint ?? "Avanço na esteira bloqueado (gate ou WIP).",
+    );
+  }
+}
+
 /**
  * Tenta avançar a esteira após gravar documentação (gate → WIP → POST, uma coluna por passo).
  */

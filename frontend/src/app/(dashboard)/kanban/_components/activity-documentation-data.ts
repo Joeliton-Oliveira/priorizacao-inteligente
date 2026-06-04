@@ -3,6 +3,14 @@ import { TODO_CHECKLIST_OPTIONS } from "./todo-checklist";
 
 const MARCAR_FEITO_OBS = "Confirmado na esteira (sem formulário detalhado).";
 
+/** Valor enviado quando o usuário deixa Restrições em branco. */
+export const DEFAULT_BACKLOG_RESTRICOES = "Nenhuma";
+
+export function normalizeBacklogRestricoes(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : DEFAULT_BACKLOG_RESTRICOES;
+}
+
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -238,11 +246,18 @@ export function parseBackendDocumentation(
   };
 }
 
-export function serializeBacklogDocumentacao(backlog: BacklogDocumentacao) {
+export function serializeBacklogDocumentacao(
+  backlog: BacklogDocumentacao,
+  options?: { applyDefaults?: boolean },
+) {
+  const applyDefaults = options?.applyDefaults !== false;
+  const restricoes = applyDefaults
+    ? normalizeBacklogRestricoes(backlog.restricoes)
+    : backlog.restricoes.trim();
   return JSON.stringify({
     nome_funcionalidade: backlog.nomeFuncionalidade.trim(),
     descricao_detalhada: backlog.descricaoDetalhada.trim(),
-    restricoes: backlog.restricoes.trim(),
+    restricoes,
     requisitos_funcionais: backlog.requisitosFuncionais.map((item) => item.trim()).filter(Boolean),
     requisitos_nao_funcionais: backlog.requisitosNaoFuncionais
       .map((item) => item.trim())
@@ -355,7 +370,6 @@ export function isBacklogDocumentacaoEmpty(backlog: BacklogDocumentacao): boolea
   return ![
     backlog.nomeFuncionalidade,
     backlog.descricaoDetalhada,
-    backlog.restricoes,
     ...backlog.requisitosFuncionais,
     ...backlog.requisitosNaoFuncionais,
     ...backlog.regrasNegocio,
@@ -369,7 +383,7 @@ export function buildMarcarComoFeitoBacklog(tituloAtividade?: string): BacklogDo
   return {
     nomeFuncionalidade: nome,
     descricaoDetalhada: "Documentação mínima gerada para avançar na esteira.",
-    restricoes: "Nenhuma",
+    restricoes: DEFAULT_BACKLOG_RESTRICOES,
     requisitosFuncionais: ["Requisito funcional confirmado na esteira."],
     requisitosNaoFuncionais: ["Requisito não funcional confirmado na esteira."],
     regrasNegocio: ["Regra de negócio confirmada na esteira."],
@@ -457,7 +471,7 @@ export function serializeClearPhaseContent(
   const empty = getEmptyActivityDocumentation();
   switch (phase) {
     case "backlog":
-      return serializeBacklogDocumentacao(empty.backlog);
+      return serializeBacklogDocumentacao(empty.backlog, { applyDefaults: false });
     case "to-do":
       return serializeToDoDocumentacao(empty.toDo!, requisitoId);
     case "develop":

@@ -6,7 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { BacklogDocumentacao } from "./activity-documentation-data";
+import {
+  normalizeBacklogRestricoes,
+  type BacklogDocumentacao,
+} from "./activity-documentation-data";
 import { NumberedListField } from "./numbered-list-field";
 
 function listFromBacklog(items: string[]) {
@@ -52,7 +55,7 @@ export function BacklogPhaseFillForm({
     onSave({
       nomeFuncionalidade: nomeFuncionalidade.trim(),
       descricaoDetalhada: descricaoDetalhada.trim(),
-      restricoes: restricoes.trim(),
+      restricoes: normalizeBacklogRestricoes(restricoes),
       requisitosFuncionais: trimList(requisitosFuncionais),
       requisitosNaoFuncionais: trimList(requisitosNaoFuncionais),
       regrasNegocio: trimList(regrasNegocio),
@@ -89,11 +92,12 @@ export function BacklogPhaseFillForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="doc-restricoes">Restrições (use «Nenhuma» se não houver)</Label>
+            <Label htmlFor="doc-restricoes">Restrições (opcional)</Label>
             <Textarea
               id="doc-restricoes"
               value={restricoes}
               onChange={(event) => setRestricoes(event.target.value)}
+              placeholder="Deixe em branco para registrar «Nenhuma»"
               className="min-h-[100px]"
             />
           </div>

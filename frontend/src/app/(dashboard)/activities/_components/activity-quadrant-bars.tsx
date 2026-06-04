@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { MatrixPoint } from "./mock-matrix-data";
+import type { MatrixPoint } from "@/lib/priorizacao/types";
 import { QuadrantLegend, type QuadrantExplanationRow } from "./quadrant-explanation-table";
 import { DashboardPanel, DashboardPanelHeader } from "./dashboard-panel";
 

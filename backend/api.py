@@ -2,6 +2,7 @@
 API REST — Matriz de Priorização
 Documentação Swagger em /docs
 """
+import os
 from typing import Any, Literal, Optional
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -687,6 +688,16 @@ async def _startup_aviso_documentacao():
         "[api] Confirme com: GET http://127.0.0.1:8000/api/v1/ping",
         flush=True,
     )
+    if os.getenv("SEED_INICIAL_ON_STARTUP", "true").strip().lower() in ("1", "true", "yes", "on"):
+        try:
+            from db.seed_runner import executar_seed_inicial_se_necessario
+
+            if executar_seed_inicial_se_necessario():
+                print("[api] Seed inicial aplicado (projetos, bugs e features).", flush=True)
+            else:
+                print("[api] Seed inicial ignorado: já existem projetos no banco.", flush=True)
+        except Exception as exc:
+            print(f"[api] Aviso: seed inicial não executado ({exc}).", flush=True)
 
 
 @app.get(

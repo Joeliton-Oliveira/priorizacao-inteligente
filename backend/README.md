@@ -39,6 +39,17 @@ Com Docker Compose, a API sobe em `http://localhost:8000` e a documentação int
 - `GET /api/v1/demandas/{id}/visao-360`
 - `GET /api/v1/demandas/{id}/auditoria`
 
+## Seed inicial
+
+Com o Postgres no ar:
+
+```bash
+python db/seed_inicial.py          # só se não houver projetos (ou falha se já existir)
+python db/seed_inicial.py --force  # remove projetos deste seed e recria
+```
+
+Na subida via Docker, o seed roda automaticamente quando a tabela `projeto` está vazia (`SEED_INICIAL_ON_STARTUP=true`).
+
 ## Testes
 
 ```bash

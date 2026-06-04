@@ -304,6 +304,22 @@ function FillPhaseActions({
     return <ReabrirButton isSaving={isSaving} onReabrir={onReabrir} />;
   }
 
+  if (flowStatus === "reopened") {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-8 shrink-0 rounded-lg border-amber-500/30 bg-amber-500/10 px-3 text-amber-100 hover:bg-amber-500/25 hover:text-amber-50"
+        disabled={isSaving}
+        onClick={onPreencher}
+      >
+        <Pencil className="size-3.5" />
+        Preencher
+      </Button>
+    );
+  }
+
   return (
     <Button
       type="button"
