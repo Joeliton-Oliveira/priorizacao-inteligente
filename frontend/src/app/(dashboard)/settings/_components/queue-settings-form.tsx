@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { NumberStepper } from "./number-stepper";
 import type { ConfigFila } from "@/lib/priorizacao/types";
+import { toast } from "sonner";
 
 export const DEFAULT_QUEUE_SETTINGS: ConfigFila = {
   vazao: {
@@ -80,7 +81,6 @@ function mergeConfig(config: Partial<ConfigFila> | null | undefined): ConfigFila
 
 export function QueueSettingsForm() {
   const [settings, setSettings] = useState<ConfigFila>(DEFAULT_QUEUE_SETTINGS);
-  const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -135,7 +135,6 @@ export function QueueSettingsForm() {
   const handleSave = async () => {
     try {
       setIsSaving(true);
-      setSavedMessage(null);
       setErrorMessage(null);
       const bugs = clampPercentual(settings.vazao.bugs);
       const payload: ConfigFila = {
@@ -155,10 +154,9 @@ export function QueueSettingsForm() {
             : "Não foi possível salvar a calibragem."),
         );
       }
-      setSavedMessage("Configuração salva (inclui WIP do Kanban).");
-      window.setTimeout(() => setSavedMessage(null), 4000);
+      toast.success("Configuração salva (inclui WIP do Kanban).");
     } catch (error) {
-      setErrorMessage(
+      toast.error(
         error instanceof Error ? error.message : "Não foi possível salvar a calibragem.",
       );
     } finally {
@@ -306,9 +304,6 @@ export function QueueSettingsForm() {
         <p className="text-sm text-muted-foreground">
           As alterações serão aplicadas imediatamente.
         </p>
-        {savedMessage ? (
-          <p className="text-sm text-emerald-400">{savedMessage}</p>
-        ) : null}
       </div>
     </div>
   );

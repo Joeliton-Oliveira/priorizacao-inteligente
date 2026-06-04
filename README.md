@@ -35,7 +35,15 @@ O frontend roda em modo de desenvolvimento com `next dev --webpack`, mantendo re
 
 O schema inicial é carregado automaticamente a partir de `backend/db/schema.sql` no primeiro start do volume do Postgres.
 
-Se precisar recriar o banco do zero e reaplicar o schema:
+Na primeira subida com banco vazio, o backend executa o **seed inicial** (`backend/db/seed_inicial.py`): 3 projetos, cada um com 2 bugs e 2 features (incrementos), já avaliados na matriz e com alguns cards em colunas diferentes do Kanban. Controle pela variável `SEED_INICIAL_ON_STARTUP` (padrão `true` no `.env.example`).
+
+Recarregar só os dados de demonstração (sem apagar o volume):
+
+```bash
+docker compose exec backend python db/seed_inicial.py --force
+```
+
+Se precisar recriar o banco do zero e reaplicar o schema + seed:
 
 ```bash
 docker compose down -v

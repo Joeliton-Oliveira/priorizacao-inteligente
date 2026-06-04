@@ -27,7 +27,6 @@ export function evalBacklogGate(
   const exigirRegrasECriterios = options?.exigirRegrasECriterios ?? true;
   if (!backlog.nomeFuncionalidade.trim()) falta.push("Nome da funcionalidade");
   if (!backlog.descricaoDetalhada.trim()) falta.push("Descrição detalhada");
-  if (!backlog.restricoes.trim()) falta.push("Restrições (ou «Nenhuma»)");
   if (!listaTemItem(backlog.requisitosFuncionais)) falta.push("Pelo menos um requisito funcional (RF)");
   if (!listaTemItem(backlog.requisitosNaoFuncionais)) {
     falta.push("Pelo menos um requisito não funcional (RNF)");

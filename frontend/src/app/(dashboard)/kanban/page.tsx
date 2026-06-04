@@ -434,7 +434,6 @@ export default function KanbanPage() {
   const [filaRank, setFilaRank] = useState<Map<number, number>>(new Map());
   const [config, setConfig] = useState<ConfigFila | null>(null);
   const [gatesById, setGatesById] = useState<Record<number, KanbanGatesResponse>>({});
-  const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [movingId, setMovingId] = useState<number | null>(null);
@@ -577,7 +576,6 @@ export default function KanbanPage() {
     try {
       setMovingId(item.id);
       setErrorMessage(null);
-      setMessage(null);
 
       if (isRetrocesso) {
         const response = await fetch(`/api/priorizacao/requisitos/${item.id}/status`, {
@@ -592,26 +590,22 @@ export default function KanbanPage() {
               ? data.detail
               : "Não foi possível atualizar o status da atividade.";
           toast.error("Não foi possível mover", { description: detail });
-          setErrorMessage(detail);
           return;
         }
-        toast.success(`Movido para ${targetColumn}`);
-        setMessage(`Atividade #${item.id} movida para ${targetColumn}.`);
+        toast.success(`Movido para ${targetColumn}`, {
+          description: `Atividade #${item.id} atualizada na esteira.`,
+        });
         await loadBoard();
         return;
       }
 
       const advance = await tentarAvancoAutomaticoKanban(item.id, { maxSteps: 1 });
       if (advance.stopped === "ok" && advance.stepsCompleted > 0) {
-        setMessage(`Atividade #${item.id} movida para a próxima coluna.`);
         await loadBoard();
-      } else if (advance.stopped === "wip" || advance.stopped === "gate" || advance.stopped === "error") {
-        if (advance.detail) setErrorMessage(advance.detail);
       }
     } catch (error) {
       const msg =
         error instanceof Error ? error.message : "Não foi possível atualizar o status da atividade.";
-      setErrorMessage(msg);
       toast.error("Não foi possível mover", { description: msg });
     } finally {
       setMovingId(null);
@@ -623,7 +617,7 @@ export default function KanbanPage() {
     const targetIndex = direction === "next" ? currentIndex + 1 : currentIndex - 1;
     const targetColumn = COLUMN_ORDER[targetIndex];
     if (!targetColumn) {
-      setErrorMessage("Não é possível mover o cartão nesta direção.");
+      toast.error("Não é possível mover o cartão nesta direção.");
       return;
     }
 
@@ -671,9 +665,7 @@ export default function KanbanPage() {
     if (!item) return;
 
     if (!targetColumn) {
-      setErrorMessage(
-        "Solte o cartão sobre uma coluna ou sobre um cartão da coluna de destino.",
-      );
+      toast.error("Solte o cartão sobre uma coluna ou sobre um cartão da coluna de destino.");
       return;
     }
 
@@ -682,7 +674,7 @@ export default function KanbanPage() {
     }
 
     if (!isAdjacentColumn(item, targetColumn)) {
-      setErrorMessage(
+      toast.error(
         "Só é possível mover para a coluna imediata. Use Voltar várias vezes para chegar ao BACKLOG.",
       );
       return;
@@ -703,12 +695,6 @@ export default function KanbanPage() {
           Ver todas as atividades da esteira em lista
         </Link>
       </div>
-
-      {message ? (
-        <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-600 dark:text-emerald-400">
-          {message}
-        </p>
-      ) : null}
 
       {errorMessage ? (
         <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-red-500">

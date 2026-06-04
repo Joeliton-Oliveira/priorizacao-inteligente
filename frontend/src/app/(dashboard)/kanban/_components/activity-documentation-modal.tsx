@@ -73,6 +73,7 @@ export function ActivityDocumentationModal({
   );
   const [fillPhase, setFillPhase] = useState<DocumentationFillPhaseId | null>(null);
   const [reopenedPhase, setReopenedPhase] = useState<DocumentationPhaseKey | null>(null);
+  const [formSessionKey, setFormSessionKey] = useState(0);
 
   useEffect(() => {
     if (!open) {
@@ -132,11 +133,15 @@ export function ActivityDocumentationModal({
     for (const key of getPhasesToClear(phase, raw)) {
       next = clearPhaseInDoc(next, key);
     }
+    setFillPhase(null);
     applyDoc(next);
+    setFormSessionKey((key) => key + 1);
 
     if (phase === "backlog" || phase === "test") {
       setReopenedPhase(phase);
       setFillPhase(phase);
+    } else {
+      setReopenedPhase(null);
     }
   };
 
@@ -148,8 +153,23 @@ export function ActivityDocumentationModal({
   };
 
   const handleCancelFill = () => {
+    const phase = fillPhase;
+    const isReopenFlow =
+      Boolean(phase) &&
+      reopenedPhase === phase &&
+      (phase === "backlog" || phase === "test");
+
     setFillPhase(null);
-    setReopenedPhase(null);
+
+    if (!isReopenFlow) {
+      setReopenedPhase(null);
+      return;
+    }
+
+    setFormSessionKey((key) => key + 1);
+    requestAnimationFrame(() => {
+      setFillPhase(phase);
+    });
   };
 
   const viewData = useMemo(
@@ -190,6 +210,7 @@ export function ActivityDocumentationModal({
         <div className="-mx-1 flex-1 overflow-y-auto px-1 pb-1">
           {fillPhase === "backlog" ? (
             <BacklogPhaseFillForm
+              key={`backlog-${formSessionKey}`}
               initial={viewData.backlog}
               requirementType={requirementType}
               onSave={(backlog) => updateDoc({ backlog })}
@@ -197,6 +218,7 @@ export function ActivityDocumentationModal({
             />
           ) : fillPhase === "test" ? (
             <TestPhaseFillForm
+              key={`test-${formSessionKey}`}
               cardId={cardId}
               initial={viewData.test}
               onSave={(test) => updateDoc({ test })}
