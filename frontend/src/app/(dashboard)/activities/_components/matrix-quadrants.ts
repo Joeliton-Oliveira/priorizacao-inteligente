@@ -1,4 +1,4 @@
-import type { MatrixPoint } from "./mock-matrix-data";
+import type { MatrixPoint } from "@/lib/priorizacao/types";
 import type { QuadrantExplanationRow } from "./quadrant-explanation-table";
 
 /** Mesmo corte da fila (`fila_priorizacao.py`). */

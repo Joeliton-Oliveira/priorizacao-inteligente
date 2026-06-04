@@ -1,6 +1,6 @@
 "use client";
 
-import type { MatrixPoint } from "./mock-matrix-data";
+import type { MatrixPoint } from "@/lib/priorizacao/types";
 import {
   INCREMENT_QUADRANT_BAR_COLORS,
   INCREMENT_QUADRANT_EXPLANATION,

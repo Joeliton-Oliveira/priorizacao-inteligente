@@ -237,14 +237,6 @@ def chave_ordenacao_incremento(item: dict) -> tuple:
     )
 
 
-def chave_ordenacao_fila(item: dict) -> tuple:
-    """Compatibilidade: delega ao tipo do item."""
-    tipo = (item.get("tipo_requisito") or "").upper()
-    if tipo == "BUG":
-        return chave_ordenacao_bug(item)
-    return chave_ordenacao_incremento(item)
-
-
 def montar_duas_filas_completas(itens: list[dict], config: dict[str, Any]) -> tuple[list[dict], list[dict]]:
     """
     Todas as atividades BUG ordenadas entre si; todas INCREMENTO ordenadas entre si.
