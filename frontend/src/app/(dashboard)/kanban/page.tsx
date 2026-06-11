@@ -310,22 +310,23 @@ function KanbanCard(props: KanbanCardProps) {
   const { item, blocked, wipBlocked, pendingCount, gates, movingId, onMovePrev, onMoveNext } = props;
   const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, isDragging } =
     useDraggable({
-    id: getCardDragId(item.id),
-    disabled: movingId !== null,
+      id: getCardDragId(item.id),
+      disabled: movingId === item.id,
     });
 
   return (
     <div
       ref={setNodeRef}
       draggable={false}
+      aria-hidden={isDragging}
       onDragStart={(event) => event.preventDefault()}
       style={{
         transform: CSS.Transform.toString(transform),
       }}
-      className={`select-none rounded-2xl border border-white/10 bg-card/85 p-3 shadow-md shadow-black/20 ring-1 ring-white/5 transition-all ${
+      className={`select-none rounded-2xl border border-white/10 bg-card/85 p-3 shadow-md shadow-black/20 ring-1 ring-white/5 ${
         isDragging
-          ? "scale-[0.99] opacity-45 shadow-xl shadow-primary/30"
-          : "hover:border-primary/40 hover:shadow-lg hover:shadow-primary/15"
+          ? "pointer-events-none opacity-0"
+          : "transition-[box-shadow,border-color] hover:border-primary/40 hover:shadow-lg hover:shadow-primary/15"
       }`}
     >
       <KanbanCardContent
@@ -446,6 +447,60 @@ export default function KanbanPage() {
     }),
   );
 
+  const mapActivitiesToItems = (activitiesData: unknown): KanbanItem[] =>
+    Array.isArray(activitiesData)
+      ? (activitiesData as AtividadePriorizada[]).map((item) => ({
+          ...item,
+          columnId: statusToColumn(item.status_atual),
+        }))
+      : [];
+
+  const refreshGatesForItem = async (itemId: number) => {
+    const response = await fetch(`/api/priorizacao/kanban/${itemId}/gates`, {
+      cache: "no-store",
+    });
+    const data = await response.json().catch(() => null);
+    if (response.ok && data) {
+      setGatesById((prev) => ({ ...prev, [itemId]: data as KanbanGatesResponse }));
+    }
+  };
+
+  const refreshGatesForItems = async (itemIds: number[]) => {
+    const uniqueIds = [...new Set(itemIds)];
+    await Promise.all(uniqueIds.map((id) => refreshGatesForItem(id)));
+  };
+
+  const refreshActivitiesSilent = async () => {
+    const [activitiesResponse, filaResponse] = await Promise.all([
+      fetch("/api/priorizacao/atividades", { cache: "no-store" }),
+      fetch("/api/priorizacao/fila", { cache: "no-store" }),
+    ]);
+    const [activitiesData, filaData] = await Promise.all([
+      activitiesResponse.json().catch(() => []),
+      filaResponse.json().catch(() => []),
+    ]);
+    if (activitiesResponse.ok) {
+      setItems(mapActivitiesToItems(activitiesData));
+    }
+    if (filaResponse.ok && Array.isArray(filaData)) {
+      setFilaRank(buildFilaRankMap(filaData as { id: number }[]));
+    }
+  };
+
+  const applyOptimisticColumnMove = (itemId: number, targetColumn: ColumnId) => {
+    setItems((prev) =>
+      prev.map((entry) =>
+        entry.id === itemId
+          ? { ...entry, columnId: targetColumn, status_atual: columnToStatus(targetColumn) }
+          : entry,
+      ),
+    );
+  };
+
+  const rollbackItem = (snapshot: KanbanItem) => {
+    setItems((prev) => prev.map((entry) => (entry.id === snapshot.id ? snapshot : entry)));
+  };
+
   const loadBoard = async () => {
     try {
       setIsLoading(true);
@@ -481,12 +536,7 @@ export default function KanbanPage() {
         );
       }
 
-      const nextItems = Array.isArray(activitiesData)
-        ? (activitiesData as AtividadePriorizada[]).map((item) => ({
-            ...item,
-            columnId: statusToColumn(item.status_atual),
-          }))
-        : [];
+      const nextItems = mapActivitiesToItems(activitiesData);
 
       setItems(nextItems);
       setConfig((configData as ConfigFila | null) ?? null);
@@ -569,13 +619,22 @@ export default function KanbanPage() {
       return;
     }
 
-    const currentIndex = COLUMN_ORDER.indexOf(item.columnId);
+    const snapshot: KanbanItem = { ...item };
+    const sourceColumn = item.columnId;
+    const currentIndex = COLUMN_ORDER.indexOf(sourceColumn);
     const targetIndex = COLUMN_ORDER.indexOf(targetColumn);
     const isRetrocesso = targetIndex < currentIndex;
+
+    const affectedPeerIds = items
+      .filter((entry) => entry.columnId === sourceColumn || entry.columnId === targetColumn)
+      .map((entry) => entry.id);
 
     try {
       setMovingId(item.id);
       setErrorMessage(null);
+
+      applyOptimisticColumnMove(item.id, targetColumn);
+      setActiveDragItemId((current) => (current === item.id ? null : current));
 
       if (isRetrocesso) {
         const response = await fetch(`/api/priorizacao/requisitos/${item.id}/status`, {
@@ -585,6 +644,7 @@ export default function KanbanPage() {
         });
         const data = await response.json().catch(() => null);
         if (!response.ok) {
+          rollbackItem(snapshot);
           const detail =
             data && typeof data === "object" && "detail" in data && typeof data.detail === "string"
               ? data.detail
@@ -595,15 +655,41 @@ export default function KanbanPage() {
         toast.success(`Movido para ${targetColumn}`, {
           description: `Atividade #${item.id} atualizada na esteira.`,
         });
-        await loadBoard();
+        await Promise.all([refreshActivitiesSilent(), refreshGatesForItems([item.id, ...affectedPeerIds])]);
         return;
       }
 
-      const advance = await tentarAvancoAutomaticoKanban(item.id, { maxSteps: 1 });
+      const advance = await tentarAvancoAutomaticoKanban(item.id, { maxSteps: 1, silent: true });
       if (advance.stopped === "ok" && advance.stepsCompleted > 0) {
-        await loadBoard();
+        toast.success(`Movido para ${targetColumn}`, {
+          description: `Atividade #${item.id} avançou na esteira.`,
+        });
+        await Promise.all([refreshActivitiesSilent(), refreshGatesForItems([item.id, ...affectedPeerIds])]);
+        return;
+      }
+
+      rollbackItem(snapshot);
+      if (advance.stopped === "gate" && advance.gates) {
+        const falta = advance.gates.falta_documentacao;
+        toast.error("Documentação incompleta", {
+          description:
+            falta.length > 0
+              ? falta.slice(0, 3).join("; ") + (falta.length > 3 ? "…" : "")
+              : `Conclua a documentação da coluna ${advance.gates.coluna_kanban} antes de avançar.`,
+        });
+      } else if (advance.stopped === "wip" && advance.gates) {
+        const wip = advance.gates.wip_destino;
+        const coluna = wip?.coluna ?? advance.gates.proxima_coluna ?? "destino";
+        toast.error(`Limite WIP em ${coluna}`, {
+          description: `A coluna já tem ${wip?.ocupacao ?? "?"} de ${wip?.limite ?? "?"} atividades.`,
+        });
+      } else if (advance.detail) {
+        toast.error("Não foi possível mover", { description: advance.detail });
+      } else {
+        toast.error("Não foi possível mover");
       }
     } catch (error) {
+      rollbackItem(snapshot);
       const msg =
         error instanceof Error ? error.message : "Não foi possível atualizar o status da atividade.";
       toast.error("Não foi possível mover", { description: msg });
@@ -656,24 +742,32 @@ export default function KanbanPage() {
   const handleDragEnd = async (event: DragEndEvent) => {
     const draggedId = parseCardDragId(event.active.id);
     const targetColumn = event.over ? resolveDropColumn(event.over.id, items) : null;
-    setActiveDragItemId(null);
     setHoverColumnId(null);
 
-    if (!draggedId) return;
+    if (!draggedId) {
+      setActiveDragItemId(null);
+      return;
+    }
 
     const item = items.find((entry) => entry.id === draggedId);
-    if (!item) return;
+    if (!item) {
+      setActiveDragItemId(null);
+      return;
+    }
 
     if (!targetColumn) {
+      setActiveDragItemId(null);
       toast.error("Solte o cartão sobre uma coluna ou sobre um cartão da coluna de destino.");
       return;
     }
 
     if (targetColumn === item.columnId) {
+      setActiveDragItemId(null);
       return;
     }
 
     if (!isAdjacentColumn(item, targetColumn)) {
+      setActiveDragItemId(null);
       toast.error(
         "Só é possível mover para a coluna imediata. Use Voltar várias vezes para chegar ao BACKLOG.",
       );
@@ -778,7 +872,7 @@ export default function KanbanPage() {
 
         <DragOverlay dropAnimation={null}>
           {activeDragItem ? (
-            <div className="pointer-events-none w-[320px] rounded-2xl border border-primary/40 bg-card/95 p-3 opacity-95 shadow-2xl shadow-primary/30">
+            <div className="pointer-events-none w-[320px] cursor-grabbing rounded-2xl border border-primary/40 bg-card/95 p-3 shadow-2xl shadow-primary/30 ring-1 ring-white/5">
               <KanbanCardContent
                 item={activeDragItem}
                 blocked={

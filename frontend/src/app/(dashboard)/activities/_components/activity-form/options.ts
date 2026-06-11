@@ -26,6 +26,13 @@ export const URGENCY_OPTIONS = [
   { value: "critica", label: "Crítica" },
 ];
 
+export const TEMPORARY_WORKAROUND_OPTIONS = [
+  { value: "sim", label: "Sim, existe alternativa temporária" },
+  { value: "nao", label: "Não existe alternativa" },
+  { value: "parcial", label: "Parcialmente, com limitações" },
+  { value: "nao_sei", label: "Não sei informar" },
+];
+
 export const FORM_STEPS = [
   {
     id: 1,

@@ -27,23 +27,16 @@ const FILA_ORDER_TOOLTIP =
   "1º quadrante (corte 2,5); 2º distância ao ponto ideal daquele quadrante; 3º eixos (valor/esforço ou severidade/criticidade). Score não define a posição.";
 
 const BUG_QUEUE_DESCRIPTION =
-  "Criticidade × Severidade. Quadrantes Crítica-alta → Baixa; dentro de cada um, proximidade ao ideal do quadrante e maior severidade/criticidade.";
+  "Matriz Criticidade × Severidade (corte 2,5). Ordem dos quadrantes: Crítica-alta → Alta-média → Média → Baixa. No mesmo quadrante, vence quem está mais perto do ideal; em empate, maior severidade e criticidade.";
 
 const INCREMENT_QUEUE_DESCRIPTION =
-  "Esforço × Valor. Ganhos rápidos → Grandes projetos → Melhorias simples → Baixo retorno; dentro de cada quadrante, posição mais favorável (ex.: em Ganhos rápidos, maior valor e menor esforço).";
-
-const INCREMENT_ORDER_LEGEND =
-  "Quadrantes: 1 Ganhos rápidos → 2 Grandes projetos → 3 Melhorias simples → 4 Baixo retorno. Dentro de cada um: distância ao ideal do quadrante (Ganhos rápidos: alto valor e baixo esforço).";
-
-const BUG_ORDER_LEGEND =
-  "Quadrantes: 1 Crítica-alta → 2 Alta-média → 3 Média → 4 Baixa. Dentro de cada um: distância ao ideal do quadrante (maior criticidade e severidade).";
-
+  "Matriz Esforço × Valor (corte 2,5). Ordem dos quadrantes: Ganhos rápidos → Grandes projetos → Melhorias simples → Baixo retorno. No mesmo quadrante, vence quem está mais perto do ideal (ex.: em Ganhos rápidos, menor esforço e maior valor).";
 
 const SCORE_REF_TOOLTIP =
   "Score = eixo X × eixo Y (matriz de Atividades). Um score maior não empurra o item para cima se o quadrante ou a distância ao ideal do quadrante forem piores.";
 
 const FILA_CONTEXT_NOTE =
-  "Posição definida por quadrante (corte 2,5) e distância ao ideal daquele quadrante. Score, faixa e prioridade categórica são só referência.";
+  "Score, faixa e prioridade categórica são apenas referência visual — não definem a posição na fila.";
 
 const QUADRANTE_TOOLTIP =
   "Quadrante da matriz (corte 2,5). Este é o 1º critério de ordenação da fila.";
@@ -172,14 +165,12 @@ function QueueSection({
   accent,
   title,
   description,
-  orderLegend,
   items,
   isLoading,
 }: {
   accent: QueueAccent;
   title: string;
   description: string;
-  orderLegend: string;
   items: FilaItem[];
   isLoading: boolean;
 }) {
@@ -218,9 +209,8 @@ function QueueSection({
           </div>
           <div>
             <h2 className="text-base font-semibold tracking-tight">{title}</h2>
-            <p className="mt-0.5 max-w-2xl text-sm text-muted-foreground">{description}</p>
-            <p className="mt-1.5 max-w-3xl text-xs text-muted-foreground/90">{orderLegend}</p>
-            <p className="mt-1 max-w-3xl text-xs text-sky-300/80">{FILA_CONTEXT_NOTE}</p>
+            <p className="mt-0.5 max-w-3xl text-sm text-muted-foreground">{description}</p>
+            <p className="mt-1.5 max-w-3xl text-xs text-sky-300/80">{FILA_CONTEXT_NOTE}</p>
           </div>
         </div>
         <p className="text-xs font-medium text-muted-foreground sm:pt-2">
@@ -436,7 +426,6 @@ export function PriorityQueueView({ variant }: PriorityQueueViewProps) {
           accent: "bug" as const,
           title: "Fila de bugs",
           description: BUG_QUEUE_DESCRIPTION,
-          orderLegend: BUG_ORDER_LEGEND,
           items: bugs,
         },
       ];
@@ -449,7 +438,6 @@ export function PriorityQueueView({ variant }: PriorityQueueViewProps) {
           accent: "increment" as const,
           title: "Fila de incrementos",
           description: INCREMENT_QUEUE_DESCRIPTION,
-          orderLegend: INCREMENT_ORDER_LEGEND,
           items: incrementos,
         },
       ];
@@ -461,7 +449,6 @@ export function PriorityQueueView({ variant }: PriorityQueueViewProps) {
         accent: "bug" as const,
         title: "Fila de bugs",
         description: BUG_QUEUE_DESCRIPTION,
-        orderLegend: BUG_ORDER_LEGEND,
         items: bugs,
       },
       {
@@ -469,7 +456,6 @@ export function PriorityQueueView({ variant }: PriorityQueueViewProps) {
         accent: "increment" as const,
         title: "Fila de incrementos",
         description: INCREMENT_QUEUE_DESCRIPTION,
-        orderLegend: INCREMENT_ORDER_LEGEND,
         items: incrementos,
       },
     ];
@@ -483,7 +469,7 @@ export function PriorityQueueView({ variant }: PriorityQueueViewProps) {
         : "Fila de priorização";
 
   const pageSubtitle =
-    "Ordenação por quadrante da matriz (corte 2,5) e, no mesmo quadrante, pelo maior score final. Bugs e incrementos seguem regras distintas de desempate.";
+    "Priorização por quadrante da matriz (corte 2,5) e proximidade ao ideal de cada quadrante. Bugs e incrementos usam eixos e regras de desempate distintos.";
 
   return (
     <TooltipProvider>
@@ -511,7 +497,6 @@ export function PriorityQueueView({ variant }: PriorityQueueViewProps) {
               accent={section.accent}
               title={section.title}
               description={section.description}
-              orderLegend={section.orderLegend}
               items={section.items}
               isLoading={isLoading}
             />

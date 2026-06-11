@@ -1,5 +1,6 @@
 import {
   FREQUENCY_OPTIONS,
+  TEMPORARY_WORKAROUND_OPTIONS,
   URGENCY_OPTIONS,
 } from "@/app/(dashboard)/activities/_components/activity-form/options";
 import type { ActivityFormData } from "@/lib/activity-form-draft";
@@ -18,7 +19,8 @@ function labelFor(
 }
 
 export function buildAnaliseRequestBody(form: ActivityFormData) {
-  const workaround = form.temporaryWorkaround.trim() || undefined;
+  const workaround =
+    labelFor(TEMPORARY_WORKAROUND_OPTIONS, form.temporaryWorkaround) || undefined;
 
   return {
     texto_original: form.description.trim(),

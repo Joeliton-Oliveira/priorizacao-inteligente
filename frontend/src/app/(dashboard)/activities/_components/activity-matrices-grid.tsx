@@ -5,6 +5,10 @@ import { ActivityBugQuadrantBars } from "./activity-bug-quadrant-bars";
 import { ActivityIncrementQuadrantBars } from "./activity-increment-quadrant-bars";
 import { ActivityMatrixScatter } from "./activity-matrix-scatter";
 import {
+  BUG_MATRIX_QUADRANTS,
+  INCREMENT_MATRIX_QUADRANTS,
+} from "./matrix-chart-quadrants";
+import {
   MOCK_BUGS_MATRIX,
   MOCK_INCREMENTS_MATRIX,
   type MatrixPoint,
@@ -32,18 +36,22 @@ export function ActivityMatricesGrid() {
           yLabel="Severidade"
           color="#dc2626"
           data={bugs}
+          quadrants={BUG_MATRIX_QUADRANTS}
           emptyMessage="Nenhum bug na seleção atual (ajuste os filtros)."
+          itemLabel={{ singular: "bug", plural: "bugs" }}
         />
         <ActivityBugQuadrantBars data={bugs} />
       </div>
       <div className="flex flex-col gap-4">
         <ActivityMatrixScatter
           title="Matriz de INCREMENTOs"
-          xLabel="Esforco"
+          xLabel="Esforço"
           yLabel="Valor"
           color="#2563eb"
           data={incrementos}
+          quadrants={INCREMENT_MATRIX_QUADRANTS}
           emptyMessage="Nenhum incremento na seleção atual (ajuste os filtros)."
+          itemLabel={{ singular: "incremento", plural: "incrementos" }}
         />
         <ActivityIncrementQuadrantBars data={incrementos} />
       </div>
