@@ -176,3 +176,64 @@ def test_get_fila_incrementos():
     r = client.get("/api/v1/fila/incrementos")
     if r.status_code == 200:
         assert isinstance(r.json(), list)
+
+
+@patch("services.config_fila_service.obter_configuracao")
+def test_get_config_fila(mock_get_config):
+    mock_get_config.return_value = {
+        "vazao": {"bugs": 60, "incrementos": 40},
+        "wip": {"TO_DO": 5, "DEVELOP": 2, "TEST": 2, "DEPLOY": 1},
+    }
+    r = client.get("/api/v1/config-fila")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["vazao"]["bugs"] == 60
+    assert body["wip"]["TO_DO"] == 5
+
+
+@patch("services.config_fila_service.salvar_configuracao")
+def test_post_config_fila(mock_save_config):
+    mock_save_config.return_value = {"ok": True, "message": "Configuração salva."}
+    r = client.post("/api/v1/config-fila", json={"vazao": {"bugs": 70}})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    mock_save_config.assert_called_once()
+
+
+@patch("services.demanda_consulta_service.obter_visao_360")
+def test_get_visao_360_demanda(mock_visao):
+    mock_visao.return_value = {
+        "identificacao": {"id_requisito": 1, "titulo": "Bug X"},
+        "origem_demanda": {"texto_original": "Erro"},
+        "estruturacao_ia": {"tipo_requisito": "BUG"},
+        "avaliacao": {"score": 20},
+        "respostas": [],
+        "documentacao_fase": {},
+        "gates": {"coluna_kanban": "BACKLOG"},
+    }
+    r = client.get("/api/v1/demandas/1/visao-360")
+    assert r.status_code == 200
+    assert r.json()["identificacao"]["id_requisito"] == 1
+
+
+@patch("services.demanda_consulta_service.obter_auditoria")
+def test_get_auditoria_demanda(mock_auditoria):
+    mock_auditoria.return_value = {
+        "id_requisito": 1,
+        "titulo": "Bug X",
+        "tipo_requisito": "BUG",
+        "eventos": [
+            {
+                "tipo": "avaliacao",
+                "titulo": "Avaliação registrada",
+                "descricao": "Teste",
+                "quando": "2026-05-26T12:00:00",
+                "responsavel": "QA",
+            }
+        ],
+    }
+    r = client.get("/api/v1/demandas/1/auditoria")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["id_requisito"] == 1
+    assert body["eventos"][0]["titulo"] == "Avaliação registrada"

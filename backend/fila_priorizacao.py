@@ -1,17 +1,30 @@
 # -*- coding: utf-8 -*-
 """
-Montagem da fila de priorização conforme calibragem (config_fila) e regras de quadrante/vazão (ver README.md).
+Montagem da fila de priorização conforme calibragem (config_fila) e posição na matriz.
 
-Ordenação dentro de cada tipo (BUG vs INCREMENTO):
-1) Quadrante com corte em 2,5 (prioridade Q1 → Q4 conforme o documento).
-2) Distância ao canto ideal da matriz (bugs → (5,5); incrementos → (1,5)).
-3) Desempate: score_final DESC (mantém efeito de tempo, fase e multiplicadores).
+A fila é guiada pelas coordenadas (x, y), não pelo score_final.
+Corte da matriz: CORTE_QUADRANTE = 2,5.
 
-BUG:   X=criticidade, Y=severidade. Q1 (x>2,5 e y>2,5) mais prioritário.
-INC:   X=esforço, Y=valor. Q1 (x≤2,5 e y>2,5) quick wins, mais prioritário.
+BUG (X = criticidade, Y = severidade):
+  Q1 Crítica-alta:  x > 2,5 e y > 2,5
+  Q2 Alta-média:    x > 2,5 e y <= 2,5
+  Q3 Média:         x <= 2,5 e y > 2,5
+  Q4 Baixa:         demais casos
 
-Fórmula score_final (camada B, explicativa e desempate):
-  score_final = score_base + bonus_tempo + bonus_quadrante + bonus_fase + bonus_manual
+INCREMENTO (X = esforço, Y = valor):
+  Q1 Ganhos rápidos:     x <= 2,5 e y > 2,5
+  Q2 Grandes projetos:   x > 2,5 e y > 2,5
+  Q3 Melhorias simples:  x <= 2,5 e y <= 2,5
+  Q4 Baixo retorno:      x > 2,5 e y <= 2,5
+
+Ordenação (ambos os tipos):
+  1) fila_ordem_quadrante ASC (estratégia do quadrante)
+  2) fila_distancia_ideal ASC (distância ao canto ideal *daquele* quadrante)
+  3) desempate por eixos conforme o quadrante (ver _desempate_*)
+  4) dias_parado DESC
+  5) id ASC
+
+score_final = score_base — apenas referência (matriz / prioridade categórica).
 """
 from __future__ import annotations
 
@@ -20,13 +33,38 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-# Faixas do score_final para classificação visual (baixa / média / alta / crítica)
 FAIXA_LIMITES = [(0, 5, "Baixa"), (6, 11, "Média"), (12, 19, "Alta"), (20, 1e9, "Crítica")]
 
-# Bugs: criticidade×severidade, quadrantes com corte 2,5; incrementos: esforço×valor (quick wins).
 CORTE_QUADRANTE = 2.5
-BUG_CANTO_IDEAL = (5.0, 5.0)  # criticidade × severidade — priorizar proximidade
-INC_CANTO_IDEAL = (1.0, 5.0)  # esforço × valor — baixo esforço, alto valor
+
+NOMES_QUADRANTE_BUG: dict[int, str] = {
+    1: "Crítica-alta",
+    2: "Alta-média",
+    3: "Média",
+    4: "Baixa",
+}
+
+NOMES_QUADRANTE_INCREMENTO: dict[int, str] = {
+    1: "Ganhos rápidos",
+    2: "Grandes projetos",
+    3: "Melhorias simples",
+    4: "Baixo retorno",
+}
+
+# Cantos ideais por quadrante (após classificar o item).
+BUG_IDEAL_POR_QUADRANTE: dict[int, tuple[float, float]] = {
+    1: (5.0, 5.0),           # máx. criticidade e severidade
+    2: (5.0, CORTE_QUADRANTE),  # alta criticidade, maior severidade possível no Q2
+    3: (CORTE_QUADRANTE, 5.0),  # maior severidade no Q3
+    4: (CORTE_QUADRANTE, CORTE_QUADRANTE),  # menos desfavorável no Q4
+}
+
+INC_IDEAL_POR_QUADRANTE: dict[int, tuple[float, float]] = {
+    1: (1.0, 5.0),              # Ganhos rápidos: baixo esforço, alto valor
+    2: (CORTE_QUADRANTE, 5.0),  # Grandes projetos: maior valor, menor esforço na faixa
+    3: (1.0, 1.0),              # Melhorias simples: menor esforço
+    4: (CORTE_QUADRANTE, CORTE_QUADRANTE),  # Baixo retorno: menos pior dentro do Q4
+}
 
 
 def _dias_parado(data_avaliacao) -> float:
@@ -47,26 +85,8 @@ def _dias_parado(data_avaliacao) -> float:
     return max(0.0, delta.total_seconds() / 86400.0)
 
 
-def _bonus_tempo_raw(dias_parado: float, config: dict) -> float:
-    """Bônus bruto por tempo parado (antes de multiplicadores)."""
-    env = config.get("envelhecimento") or {}
-    intervalo = env.get("intervalo_dias") or 10
-    incremento = env.get("incremento_base") or 1.0
-    limite = env.get("limite_maximo")
-    bonus = (dias_parado // intervalo) * incremento
-    if limite is not None:
-        bonus = min(bonus, float(limite))
-    return bonus
-
-
-def _multiplicador_fase(status: str, config: dict) -> float:
-    fases = config.get("fases") or {}
-    k = (status or "avaliado").lower().replace(" ", "_")
-    return float(fases.get(k, fases.get("avaliado", 1.0)))
-
-
 def ordem_quadrante_bug(cx: float, cy: float) -> int:
-    """1 = mais prioritário … 4 = menos (corte CORTE_QUADRANTE). X=criticidade, Y=severidade."""
+    """1 = mais prioritário … 4 = menos. X=criticidade, Y=severidade."""
     x, y = float(cx), float(cy)
     t = CORTE_QUADRANTE
     if x > t and y > t:
@@ -79,7 +99,7 @@ def ordem_quadrante_bug(cx: float, cy: float) -> int:
 
 
 def ordem_quadrante_incremento(cx: float, cy: float) -> int:
-    """1 = quick wins … 4 = desperdício. X=esforço, Y=valor."""
+    """1 = ganhos rápidos … 4 = baixo retorno. X=esforço, Y=valor."""
     x, y = float(cx), float(cy)
     t = CORTE_QUADRANTE
     if x <= t and y > t:
@@ -91,41 +111,38 @@ def ordem_quadrante_incremento(cx: float, cy: float) -> int:
     return 4
 
 
-def distancia_ideal_bug(cx: float, cy: float) -> float:
-    """Distância euclidiana a BUG_CANTO_IDEAL (quanto menor, mais urgente)."""
-    ix, iy = BUG_CANTO_IDEAL
-    return math.hypot(ix - float(cx), iy - float(cy))
+def nome_quadrante(tipo: str, ordem: int) -> str:
+    """Rótulo legível do quadrante para API/UI."""
+    if (tipo or "").upper() == "BUG":
+        return NOMES_QUADRANTE_BUG.get(ordem, "—")
+    return NOMES_QUADRANTE_INCREMENTO.get(ordem, "—")
 
 
-def distancia_ideal_incremento(cx: float, cy: float) -> float:
-    """Distância euclidiana a INC_CANTO_IDEAL (quanto menor, melhor o quick win)."""
-    ix, iy = INC_CANTO_IDEAL
-    return math.hypot(float(cx) - ix, iy - float(cy))
+def canto_ideal_bug(ordem: int) -> tuple[float, float]:
+    return BUG_IDEAL_POR_QUADRANTE.get(ordem, BUG_IDEAL_POR_QUADRANTE[4])
 
 
-def _multiplicador_quadrante_bug_coords(cx: float, cy: float, config: dict) -> float:
-    """Multiplicador de envelhecimento conforme quadrante real (coordenadas), não prioridade_categorica."""
-    qb = config.get("quadrantes_bug") or {}
-    q = ordem_quadrante_bug(cx, cy)
-    if q == 1:
-        return float(qb.get("critica_alta", qb.get("alta_media", 1.0)))
-    if q == 2:
-        return float(qb.get("alta_media", 0.8))
-    if q == 3:
-        return float(qb.get("media_media", 1.0))
-    return float(qb.get("baixa_baixa", 1.3))
+def canto_ideal_incremento(ordem: int) -> tuple[float, float]:
+    return INC_IDEAL_POR_QUADRANTE.get(ordem, INC_IDEAL_POR_QUADRANTE[4])
 
 
-def _multiplicador_quadrante_incremento_coords(cx: float, cy: float, config: dict) -> float:
-    qi = config.get("quadrantes_incremento") or {}
-    q = ordem_quadrante_incremento(cx, cy)
-    if q == 1:
-        return float(qi.get("quick_wins", 1.4))
-    if q == 2:
-        return float(qi.get("grandes_projetos", 1.0))
-    if q == 3:
-        return float(qi.get("preenchimento", 1.3))
-    return float(qi.get("desperdicio", 0.7))
+def distancia_ao_canto(cx: float, cy: float, canto: tuple[float, float]) -> float:
+    ix, iy = canto
+    return math.hypot(float(cx) - ix, float(cy) - iy)
+
+
+def distancia_ideal_bug(cx: float, cy: float, ordem: int | None = None) -> float:
+    """Distância ao canto ideal do quadrante do bug."""
+    if ordem is None:
+        ordem = ordem_quadrante_bug(cx, cy)
+    return distancia_ao_canto(cx, cy, canto_ideal_bug(ordem))
+
+
+def distancia_ideal_incremento(cx: float, cy: float, ordem: int | None = None) -> float:
+    """Distância ao canto ideal do quadrante do incremento."""
+    if ordem is None:
+        ordem = ordem_quadrante_incremento(cx, cy)
+    return distancia_ao_canto(cx, cy, canto_ideal_incremento(ordem))
 
 
 def _score_faixa(score_final: float) -> str:
@@ -136,63 +153,87 @@ def _score_faixa(score_final: float) -> str:
     return "Baixa"
 
 
-def _enriquecer_item(item: dict, config: dict) -> None:
+def _desempate_bug(item: dict) -> tuple:
+    """Dentro do quadrante: maior severidade, depois maior criticidade."""
+    return (
+        -float(item.get("coordenada_y", 0.0)),
+        -float(item.get("coordenada_x", 0.0)),
+    )
+
+
+def _desempate_incremento(item: dict) -> tuple:
     """
-    Preenche no item os campos do número principal (camada B):
-    score_base, bonus_tempo, bonus_quadrante, bonus_fase, bonus_manual,
-    score_final, faixa, dias_parado.
-    A ordenação da fila usa apenas score_final.
+    Q1/Q2: maior valor, menor esforço.
+    Q3/Q4: menor esforço, maior valor relativo.
+    """
+    ordem = int(item.get("fila_ordem_quadrante", 9))
+    if ordem in (1, 2):
+        return (
+            -float(item.get("coordenada_y", 0.0)),
+            float(item.get("coordenada_x", 0.0)),
+        )
+    return (
+        float(item.get("coordenada_x", 0.0)),
+        -float(item.get("coordenada_y", 0.0)),
+    )
+
+
+def _enriquecer_item(item: dict, _config: dict) -> None:
+    """
+    Preenche score_base, score_final, faixa, dias_parado, fila_ordem_quadrante,
+    fila_quadrante_nome e fila_distancia_ideal (distância ao ideal do quadrante).
     """
     data_avaliacao = item.get("data_avaliacao")
     dias = _dias_parado(data_avaliacao)
     item["dias_parado"] = round(dias, 1)
 
-    # Score base (matriz)
     score_base = float(
         item.get("score")
         or (item.get("coordenada_x", 0) * item.get("coordenada_y", 0))
     )
     item["score_base"] = round(score_base, 2)
 
-    # Bônus tempo (bruto)
-    bonus_tempo = _bonus_tempo_raw(dias, config)
-    item["bonus_tempo"] = round(bonus_tempo, 2)
-
-    # Multiplicadores
-    fase_mult = _multiplicador_fase(item.get("status_atual", "avaliado"), config)
     tipo = (item.get("tipo_requisito") or "").upper()
     cx = float(item.get("coordenada_x", 0) or 0)
     cy = float(item.get("coordenada_y", 0) or 0)
     if tipo == "BUG":
-        quad_mult = _multiplicador_quadrante_bug_coords(cx, cy, config)
-        item["fila_ordem_quadrante"] = ordem_quadrante_bug(cx, cy)
-        item["fila_distancia_ideal"] = round(distancia_ideal_bug(cx, cy), 4)
+        ordem = ordem_quadrante_bug(cx, cy)
+        canto = canto_ideal_bug(ordem)
+        item["fila_distancia_ideal"] = round(distancia_ideal_bug(cx, cy, ordem), 4)
     else:
-        quad_mult = _multiplicador_quadrante_incremento_coords(cx, cy, config)
-        item["fila_ordem_quadrante"] = ordem_quadrante_incremento(cx, cy)
-        item["fila_distancia_ideal"] = round(distancia_ideal_incremento(cx, cy), 4)
+        ordem = ordem_quadrante_incremento(cx, cy)
+        canto = canto_ideal_incremento(ordem)
+        item["fila_distancia_ideal"] = round(distancia_ideal_incremento(cx, cy, ordem), 4)
 
-    # Decomposição aditiva: bonus_quadrante e bonus_fase são o "extra" dos multiplicadores
-    # total_ajuste = bonus_tempo * quad_mult * fase_mult
-    # bonus_quadrante = bonus_tempo * (quad_mult - 1), bonus_fase = bonus_tempo * quad_mult * (fase_mult - 1)
-    bonus_quadrante = bonus_tempo * (quad_mult - 1.0)
-    bonus_fase = bonus_tempo * quad_mult * (fase_mult - 1.0)
-    item["bonus_quadrante"] = round(bonus_quadrante, 2)
-    item["bonus_fase"] = round(bonus_fase, 2)
-    item["bonus_manual"] = 0.0
+    item["fila_canto_ideal_x"] = round(canto[0], 2)
+    item["fila_canto_ideal_y"] = round(canto[1], 2)
+    item["fila_ordem_quadrante"] = ordem
+    item["fila_quadrante_nome"] = nome_quadrante(tipo, ordem)
 
-    # Número principal: score_final ordena a fila
-    score_final = score_base + bonus_tempo + bonus_quadrante + bonus_fase + item["bonus_manual"]
+    score_final = score_base
     item["score_final"] = round(score_final, 2)
     item["faixa"] = _score_faixa(item["score_final"])
 
 
-def chave_ordenacao_fila(item: dict) -> tuple:
-    """Tuplo para ordenar: quadrante (1 primeiro), distância ao canto ideal, score_final (desempate)."""
+def chave_ordenacao_bug(item: dict) -> tuple:
+    """Quadrante → distância ao ideal do quadrante → severidade → criticidade → dias → id."""
     return (
         int(item.get("fila_ordem_quadrante", 9)),
         float(item.get("fila_distancia_ideal", 1e9)),
-        -float(item.get("score_final", 0.0)),
+        *_desempate_bug(item),
+        -float(item.get("dias_parado", 0.0)),
+        int(item.get("id", 0)),
+    )
+
+
+def chave_ordenacao_incremento(item: dict) -> tuple:
+    """Quadrante → distância ao ideal do quadrante → desempate por Q → dias → id."""
+    return (
+        int(item.get("fila_ordem_quadrante", 9)),
+        float(item.get("fila_distancia_ideal", 1e9)),
+        *_desempate_incremento(item),
+        -float(item.get("dias_parado", 0.0)),
+        int(item.get("id", 0)),
     )
 
 
@@ -207,9 +248,43 @@ def montar_duas_filas_completas(itens: list[dict], config: dict[str, Any]) -> tu
         _enriquecer_item(item, config)
     bugs = [i for i in itens if (i.get("tipo_requisito") or "").upper() == "BUG"]
     incrementos = [i for i in itens if (i.get("tipo_requisito") or "").upper() == "INCREMENTO"]
-    bugs.sort(key=chave_ordenacao_fila)
-    incrementos.sort(key=chave_ordenacao_fila)
+    bugs.sort(key=chave_ordenacao_bug)
+    incrementos.sort(key=chave_ordenacao_incremento)
     return bugs, incrementos
+
+
+def intercalar_por_vazao(
+    bugs: list[dict],
+    incrementos: list[dict],
+    pct_bugs: float,
+    pct_inc: float,
+) -> list[dict]:
+    """
+    Intercala duas filas já ordenadas respeitando a proporção configurada (ex.: 2/98).
+    Usa comparação (i+1)/peso_bugs vs (j+1)/peso_inc para distribuir ao longo da lista.
+    """
+    if not bugs:
+        return list(incrementos)
+    if not incrementos:
+        return list(bugs)
+    peso_bugs = max(float(pct_bugs), 0.01)
+    peso_inc = max(float(pct_inc), 0.01)
+    fila: list[dict] = []
+    i_b = i_i = 0
+    while i_b < len(bugs) or i_i < len(incrementos):
+        if i_b >= len(bugs):
+            fila.append(incrementos[i_i])
+            i_i += 1
+        elif i_i >= len(incrementos):
+            fila.append(bugs[i_b])
+            i_b += 1
+        elif (i_b + 1) / peso_bugs <= (i_i + 1) / peso_inc:
+            fila.append(bugs[i_b])
+            i_b += 1
+        else:
+            fila.append(incrementos[i_i])
+            i_i += 1
+    return fila
 
 
 def montar_fila(
@@ -219,15 +294,15 @@ def montar_fila(
     intercalar: bool = True,
 ) -> list[dict]:
     """
-    Enriquece cada item com score_base, bônus e score_final; ordena por score_final DESC;
-    monta a fila respeitando a vazão (bugs % / melhorias %).
-    Retorna lista de itens com campos da camada B preenchidos.
+    Enriquece itens, ordena por quadrante e desempates por tipo; monta fila com vazão.
     """
     if not itens:
         return []
     vazao = config.get("vazao") or {}
-    pct_bugs = float(vazao.get("bugs", 60)) / 100.0
-    pct_inc = float(vazao.get("incrementos", 40)) / 100.0
+    pct_bugs = float(vazao.get("bugs", 60))
+    pct_inc = float(vazao.get("incrementos", 40))
+    pct_bugs_frac = pct_bugs / 100.0
+    pct_inc_frac = pct_inc / 100.0
 
     for item in itens:
         _enriquecer_item(item, config)
@@ -235,17 +310,26 @@ def montar_fila(
     bugs = [i for i in itens if (i.get("tipo_requisito") or "").upper() == "BUG"]
     incrementos = [i for i in itens if (i.get("tipo_requisito") or "").upper() == "INCREMENTO"]
 
-    bugs.sort(key=chave_ordenacao_fila)
-    incrementos.sort(key=chave_ordenacao_fila)
+    bugs.sort(key=chave_ordenacao_bug)
+    incrementos.sort(key=chave_ordenacao_incremento)
 
     tamanho = tamanho or len(itens)
-    n_bugs = max(0, int(round(tamanho * pct_bugs)))
-    n_inc = max(0, min(tamanho - n_bugs, len(incrementos)))
-    n_bugs = min(n_bugs, len(bugs))
-    if n_bugs + n_inc < tamanho and n_bugs < len(bugs):
-        n_bugs = min(tamanho - n_inc, len(bugs))
-    elif n_bugs + n_inc < tamanho and n_inc < len(incrementos):
-        n_inc = min(tamanho - n_bugs, len(incrementos))
+    lista_completa = tamanho >= len(itens)
+
+    if lista_completa:
+        n_bugs = len(bugs)
+        n_inc = len(incrementos)
+    else:
+        n_bugs = min(max(0, int(round(tamanho * pct_bugs_frac))), len(bugs))
+        n_inc = min(max(0, int(round(tamanho * pct_inc_frac))), len(incrementos))
+        if n_bugs + n_inc > tamanho:
+            excesso = n_bugs + n_inc - tamanho
+            if n_inc >= excesso:
+                n_inc -= excesso
+            else:
+                excesso -= n_inc
+                n_inc = 0
+                n_bugs = max(0, n_bugs - excesso)
 
     top_bugs = bugs[:n_bugs]
     top_inc = incrementos[:n_inc]
@@ -253,13 +337,7 @@ def montar_fila(
     if not intercalar:
         return top_bugs + top_inc
 
-    fila = []
-    i_b, i_i = 0, 0
-    while i_b < len(top_bugs) or i_i < len(top_inc):
-        if i_b < len(top_bugs):
-            fila.append(top_bugs[i_b])
-            i_b += 1
-        if i_i < len(top_inc):
-            fila.append(top_inc[i_i])
-            i_i += 1
+    fila = intercalar_por_vazao(top_bugs, top_inc, pct_bugs, pct_inc)
+    if not lista_completa and len(fila) > tamanho:
+        fila = fila[:tamanho]
     return fila

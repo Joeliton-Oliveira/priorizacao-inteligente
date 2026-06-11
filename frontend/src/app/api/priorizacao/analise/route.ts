@@ -4,6 +4,46 @@ import type { ActivityFormData } from "@/lib/activity-form-draft";
 
 const API_BASE =
   process.env.PRIORIZACAO_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
+const ALLOW_MOCK_FALLBACK =
+  process.env.PRIORIZACAO_ANALISE_ALLOW_MOCK_FALLBACK?.trim().toLowerCase() ===
+  "true";
+
+function buildMockResponse(body: unknown) {
+  const payload = body as Record<string, unknown>;
+  const draft = payload.formDraft as ActivityFormData | undefined;
+
+  if (draft?.description?.trim()) {
+    return NextResponse.json(mockAnaliseFromForm(draft), {
+      headers: { "X-Analise-Source": "mock" },
+    });
+  }
+
+  if (!String(payload.texto_original ?? "").trim()) {
+    return NextResponse.json(
+      { detail: "Informe a descrição da demanda antes de analisar." },
+      { status: 400 },
+    );
+  }
+
+  const mockForm: ActivityFormData = {
+    description: String(payload.texto_original ?? ""),
+    demandType: "nao_sei",
+    systemArea: String(payload.modulo_afetado ?? ""),
+    businessImportance: String(payload.contexto_negocio ?? ""),
+    expectedResult: String(payload.objetivo_desejado ?? ""),
+    perceivedImpact: String(payload.impacto_percebido_usuario ?? ""),
+    frequency: "",
+    urgency: "",
+    temporaryWorkaround: String(payload.ha_contorno ?? ""),
+    systemOrProduct: String(payload.sistema_ou_produto ?? ""),
+    projectId: "",
+    requesterId: String(payload.perfil_solicitante ?? ""),
+  };
+
+  return NextResponse.json(mockAnaliseFromForm(mockForm), {
+    headers: { "X-Analise-Source": "mock" },
+  });
+}
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -23,48 +63,23 @@ export async function POST(request: Request) {
     const data = await upstream.json().catch(() => ({}));
 
     if (!upstream.ok) {
-      if (upstream.status === 400) {
-        return NextResponse.json(data, { status: 400 });
-      }
-      throw new Error(
-        typeof data.detail === "string" ? data.detail : "Falha na API de análise",
-      );
+      return NextResponse.json(data, { status: upstream.status });
     }
 
     return NextResponse.json(data);
-  } catch {
-    const payload = body as Record<string, unknown>;
-    const draft = payload.formDraft as ActivityFormData | undefined;
-
-    if (draft?.description?.trim()) {
-      return NextResponse.json(mockAnaliseFromForm(draft), {
-        headers: { "X-Analise-Source": "mock" },
-      });
+  } catch (error) {
+    if (ALLOW_MOCK_FALLBACK) {
+      return buildMockResponse(body);
     }
 
-    if (!String(payload.texto_original ?? "").trim()) {
-      return NextResponse.json(
-        { detail: "Informe a descrição da demanda antes de analisar." },
-        { status: 400 },
-      );
-    }
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Não foi possível conectar na API de análise.";
 
-    const mockForm: ActivityFormData = {
-      description: String(payload.texto_original ?? ""),
-      demandType: "nao_sei",
-      systemArea: String(payload.modulo_afetado ?? ""),
-      businessImportance: String(payload.contexto_negocio ?? ""),
-      expectedResult: String(payload.objetivo_desejado ?? ""),
-      perceivedImpact: String(payload.impacto_percebido_usuario ?? ""),
-      frequency: "",
-      urgency: "",
-      temporaryWorkaround: "",
-      projectId: "",
-      requesterId: String(payload.perfil_solicitante ?? ""),
-    };
-
-    return NextResponse.json(mockAnaliseFromForm(mockForm), {
-      headers: { "X-Analise-Source": "mock" },
-    });
+    return NextResponse.json(
+      { detail: `${message} Ative PRIORIZACAO_ANALISE_ALLOW_MOCK_FALLBACK=true apenas se quiser usar o mock em desenvolvimento.` },
+      { status: 502 },
+    );
   }
 }

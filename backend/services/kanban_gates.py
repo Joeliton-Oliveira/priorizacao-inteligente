@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Regras de gate documental da esteira Kanban — partilhadas entre Dash (app.py) e API (api.py).
+Regras de gate documental da esteira Kanban — partilhadas entre a API e o frontend atual.
 Proíbe avanço de coluna na persistência se faltar documentação gravada em requisito_doc_fase.
 """
 from __future__ import annotations
@@ -25,6 +25,22 @@ PRONTIDAO_CHECKLIST_OPCOES = [
 ]
 PRONTIDAO_CHECKLIST_VALORES = [o["value"] for o in PRONTIDAO_CHECKLIST_OPCOES]
 
+COLUNA_PARA_STATUS_API: dict[str, str] = {
+    "BACKLOG": "BACKLOG",
+    "TO DO": "AVALIADO",
+    "DEVELOP": "EM_DESENVOLVIMENTO",
+    "TEST": "EM_TESTE",
+    "DEPLOY": "EM_HOMOLOGACAO",
+    "DONE": "DONE",
+}
+
+WIP_COLUNA_CONFIG_KEY: dict[str, str] = {
+    "TO DO": "TO_DO",
+    "DEVELOP": "DEVELOP",
+    "TEST": "TEST",
+    "DEPLOY": "DEPLOY",
+}
+
 COLUNA_PARA_DOC_GATE: dict[str, tuple[str, str]] = {
     "BACKLOG": ("doc_requisito", "BACKLOG → TO DO"),
     "TO DO": ("prontidao_dev", "TO DO → DEVELOP"),
@@ -46,6 +62,7 @@ def status_api_para_coluna_kanban(status_raw: str | None) -> str:
         "TEST": "TEST",
         "EM_TESTE": "TEST",
         "DEPLOY": "DEPLOY",
+        "EM_HOMOLOGACAO": "DEPLOY",
         "DONE": "DONE",
         "CONCLUIDO": "DONE",
         "CONCLUÍDO": "DONE",
@@ -95,7 +112,11 @@ def doc_requisito_criterios_aceitacao_preenchidos(fase_docs: dict | None) -> boo
     return doc_lista_tem_item_preenchido(crit)
 
 
-def eval_fase_docs_doc_requisito_gate(raw: str | None) -> tuple[bool, list[str]]:
+def eval_fase_docs_doc_requisito_gate(
+    raw: str | None,
+    *,
+    exigir_regras_e_criterios: bool = True,
+) -> tuple[bool, list[str]]:
     cab, rf, rnf, rg, crit = parse_doc_requisito_completo(raw or "")
     nome = (cab.get("nome_funcionalidade") or "").strip()
     desc = (cab.get("descricao_detalhada") or "").strip()
@@ -111,14 +132,20 @@ def eval_fase_docs_doc_requisito_gate(raw: str | None) -> tuple[bool, list[str]]
         falta.append("Pelo menos um requisito funcional (RF)")
     if not doc_lista_tem_item_preenchido(rnf):
         falta.append("Pelo menos um requisito não funcional (RNF)")
-    if not doc_lista_tem_item_preenchido(rg):
-        falta.append("Pelo menos uma regra de negócio")
-    if not doc_lista_tem_item_preenchido(crit):
-        falta.append("Pelo menos um critério de aceitação")
+    if exigir_regras_e_criterios:
+        if not doc_lista_tem_item_preenchido(rg):
+            falta.append("Pelo menos uma regra de negócio")
+        if not doc_lista_tem_item_preenchido(crit):
+            falta.append("Pelo menos um critério de aceitação")
     return (not falta, falta)
 
 
-def eval_fase_docs_prontidao_gate(raw: str | None, fase_docs: dict | None = None) -> tuple[bool, list[str]]:
+def eval_fase_docs_prontidao_gate(
+    raw: str | None,
+    fase_docs: dict | None = None,
+    *,
+    tipo_requisito: str | None = None,
+) -> tuple[bool, list[str]]:
     pr = parse_prontidao_dev_conteudo(raw or "")
     falta: list[str] = []
     if not (pr.get("responsavel_desenvolvimento") or "").strip():
@@ -130,11 +157,15 @@ def eval_fase_docs_prontidao_gate(raw: str | None, fase_docs: dict | None = None
     sel = set(pr.get("checklist") if isinstance(pr.get("checklist"), list) else [])
     resp_txt = (pr.get("responsavel_desenvolvimento") or "").strip()
     rotulos = {o["value"]: o["label"].strip() for o in PRONTIDAO_CHECKLIST_OPCOES}
+    tipo_norm = (tipo_requisito or "").strip().upper()
     for k in PRONTIDAO_CHECKLIST_VALORES:
         if k in sel:
             continue
         # O campo de texto «Responsável…» cumpre o mesmo critério que o item de checklist homónimo.
         if k == "responsavel_definido" and resp_txt:
+            continue
+        # BUG não exige critérios de aceitação no doc de requisito.
+        if k == "criterios_existem" and tipo_norm == "BUG":
             continue
         # Critérios já registados na aba BACKLOG (doc_requisito) dispensam marcar só o checklist TO DO.
         if k == "criterios_existem" and doc_requisito_criterios_aceitacao_preenchidos(fase_docs):
@@ -208,7 +239,11 @@ def eval_fase_docs_casos_teste_gate(raw: str | None) -> tuple[bool, list[str], i
     )
 
 
-def gate_documental_para_avancar_de_coluna(col_k: str, fase_docs: dict | None) -> tuple[bool, list[str]]:
+def gate_documental_para_avancar_de_coluna(
+    col_k: str,
+    fase_docs: dict | None,
+    tipo_requisito: str | None = None,
+) -> tuple[bool, list[str]]:
     if col_k not in COLUNA_PARA_DOC_GATE:
         return True, []
     fd = fase_docs if isinstance(fase_docs, dict) else {}
@@ -220,10 +255,13 @@ def gate_documental_para_avancar_de_coluna(col_k: str, fase_docs: dict | None) -
         s = raw
     else:
         s = str(raw)
+    tipo_norm = (tipo_requisito or "").strip().upper()
     if cod == "doc_requisito":
-        return eval_fase_docs_doc_requisito_gate(s)
+        if tipo_norm == "BUG":
+            return True, []
+        return eval_fase_docs_doc_requisito_gate(s, exigir_regras_e_criterios=True)
     if cod == "prontidao_dev":
-        return eval_fase_docs_prontidao_gate(s, fd)
+        return eval_fase_docs_prontidao_gate(s, fd, tipo_requisito=tipo_requisito)
     if cod == "entrega_dev":
         return eval_fase_docs_entrega_gate(s)
     if cod == "deploy":
@@ -234,13 +272,66 @@ def gate_documental_para_avancar_de_coluna(col_k: str, fase_docs: dict | None) -
     return True, []
 
 
+def normalizar_status_api(status_raw: str | None) -> str:
+    """Canonicaliza status gravado na esteira (aliases → valor API principal)."""
+    col = status_api_para_coluna_kanban(status_raw)
+    return COLUNA_PARA_STATUS_API.get(col, (status_raw or "BACKLOG").upper().strip().replace(" ", "_"))
+
+
+def contar_ocupacao_coluna_kanban(coluna: str, excluir_id_requisito: int | None = None) -> int:
+    """Conta atividades cuja coluna Kanban é `coluna`, opcionalmente excluindo um id."""
+    from db.avaliacao_repo import listar_status_requisito_por_coluna
+
+    return listar_status_requisito_por_coluna(coluna, excluir_id_requisito)
+
+
+def obter_limite_wip_coluna(coluna: str) -> int | None:
+    from config_fila import get_config_fila
+
+    key = WIP_COLUNA_CONFIG_KEY.get(coluna)
+    if not key:
+        return None
+    wip = (get_config_fila().get("wip") or {})
+    try:
+        limite = int(wip.get(key, 0))
+    except (TypeError, ValueError):
+        return None
+    return limite if limite > 0 else None
+
+
+def validar_wip_coluna_destino(
+    coluna_destino: str,
+    id_requisito: int,
+    idx_dest: int,
+    idx_cur: int,
+) -> tuple[bool, str | None, dict | None]:
+    """
+    Só valida WIP em avanço (idx_dest > idx_cur). Retrocesso e mesma coluna ignoram WIP.
+  Retorna (ok, mensagem_erro, wip_destino_info).
+    """
+    if idx_dest <= idx_cur:
+        return True, None, None
+    limite = obter_limite_wip_coluna(coluna_destino)
+    if limite is None:
+        return True, None, None
+    ocupacao = contar_ocupacao_coluna_kanban(coluna_destino, excluir_id_requisito=id_requisito)
+    info = {"coluna": coluna_destino, "ocupacao": ocupacao, "limite": limite}
+    if ocupacao >= limite:
+        return (
+            False,
+            f"Coluna {coluna_destino} atingiu o limite WIP ({ocupacao}/{limite}).",
+            info,
+        )
+    return True, None, info
+
+
 def validar_transicao_status_kanban(id_requisito: int, status_destino_bruto: str) -> tuple[bool, str | None]:
     """
     Impede persistência de avanço de coluna sem documentação exigida.
     Retrocesso (qualquer número de colunas) é permitido. Avanço só de uma coluna.
     Retorna (True, None) se pode gravar, (False, mensagem) caso contrário.
     """
-    from db.avaliacao_repo import obter_status_atual_requisito
+    from db.avaliacao_repo import obter_status_atual_requisito, obter_tipo_requisito
 
     dest_api = (status_destino_bruto or "").upper().strip().replace(" ", "_") or "BACKLOG"
     cur_row = obter_status_atual_requisito(id_requisito)
@@ -268,7 +359,13 @@ def validar_transicao_status_kanban(id_requisito: int, status_destino_bruto: str
         return False, "Avance apenas uma coluna de cada vez. Salto de fase não é permitido."
 
     fases = obter_documentacao_fases(id_requisito)
-    ok, falta = gate_documental_para_avancar_de_coluna(cur_col, fases)
+    tipo_requisito = obter_tipo_requisito(id_requisito)
+    ok, falta = gate_documental_para_avancar_de_coluna(cur_col, fases, tipo_requisito)
     if not ok:
         return False, "Transição bloqueada: documentação da fase atual incompleta. Falta: " + "; ".join(falta)
+
+    wip_ok, wip_err, _wip_info = validar_wip_coluna_destino(dest_col, id_requisito, idx_dest, idx_cur)
+    if not wip_ok:
+        return False, wip_err
+
     return True, None

@@ -137,6 +137,17 @@ def salvar_avaliacao_completa(
                     ),
                 )
 
+            # Novo requisito sempre nasce na coluna BACKLOG da esteira.
+            _ensure_status_requisito(cur)
+            cur.execute(
+                """
+                INSERT INTO status_requisito (id_requisito, status_atual)
+                VALUES (%s, 'BACKLOG')
+                ON CONFLICT (id_requisito) DO UPDATE SET status_atual = EXCLUDED.status_atual
+                """,
+                (id_requisito,),
+            )
+
             conn.commit()
             return {
                 "sucesso": True,
@@ -252,7 +263,7 @@ def listar_atividades_para_fila():
         else:
             prioridade_categorica = "BAIXA"
 
-        status_atual = (data.get("status_atual") or "AVALIADO").upper()
+        status_atual = (data.get("status_atual") or "BACKLOG").upper()
         row = {
             "id": id_requisito,
             "titulo": titulo or "",
@@ -291,9 +302,50 @@ def obter_status_atual_requisito(id_requisito: int) -> str | None:
         conn.close()
 
 
+def obter_tipo_requisito(id_requisito: int) -> str | None:
+    """Devolve tipo_tarefa em requisito_estruturado ou None se não existir linha."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT tipo_tarefa FROM requisito_estruturado WHERE id_requisito = %s",
+                (id_requisito,),
+            )
+            row = cur.fetchone()
+        if not row or row[0] is None:
+            return None
+        return str(row[0]).strip().upper() or None
+    finally:
+        conn.close()
+
+
+def listar_status_requisito_por_coluna(coluna_kanban: str, excluir_id_requisito: int | None = None) -> int:
+    """Conta requisitos na coluna Kanban indicada (mapeamento alinhado a kanban_gates)."""
+    from services.kanban_gates import status_api_para_coluna_kanban
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            _ensure_status_requisito(cur)
+            cur.execute("SELECT id_requisito, status_atual FROM status_requisito")
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    count = 0
+    for rid, st in rows:
+        if excluir_id_requisito is not None and rid == excluir_id_requisito:
+            continue
+        if status_api_para_coluna_kanban(st) == coluna_kanban:
+            count += 1
+    return count
+
+
 def atualizar_status_requisito(id_requisito: int, status: str) -> None:
     """Atualiza o status_atual do requisito na tabela status_requisito."""
-    status_normalizado = (status or "").upper().strip() or "BACKLOG"
+    from services.kanban_gates import normalizar_status_api
+
+    status_normalizado = normalizar_status_api(status)
     conn = get_connection()
     try:
         with conn.cursor() as cur:

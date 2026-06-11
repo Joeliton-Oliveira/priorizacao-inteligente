@@ -1,6 +1,5 @@
 import {
   FREQUENCY_OPTIONS,
-  TEMPORARY_WORKAROUND_OPTIONS,
   URGENCY_OPTIONS,
 } from "@/app/(dashboard)/activities/_components/activity-form/options";
 import type { ActivityFormData } from "@/lib/activity-form-draft";
@@ -19,14 +18,7 @@ function labelFor(
 }
 
 export function buildAnaliseRequestBody(form: ActivityFormData) {
-  const workaround =
-    form.temporaryWorkaround === "sim"
-      ? "sim"
-      : form.temporaryWorkaround === "nao"
-        ? "não"
-        : form.temporaryWorkaround === "nao_sei"
-          ? "não sei"
-          : undefined;
+  const workaround = form.temporaryWorkaround.trim() || undefined;
 
   return {
     texto_original: form.description.trim(),
@@ -38,6 +30,7 @@ export function buildAnaliseRequestBody(form: ActivityFormData) {
     frequencia_ocorrencia: labelFor(FREQUENCY_OPTIONS, form.frequency) || undefined,
     urgencia_percebida: labelFor(URGENCY_OPTIONS, form.urgency) || undefined,
     ha_contorno: workaround,
+    sistema_ou_produto: form.systemOrProduct.trim() || undefined,
     perfil_solicitante: form.requesterId.trim() || undefined,
   };
 }

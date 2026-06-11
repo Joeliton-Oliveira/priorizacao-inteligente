@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { PriorityQueueView } from "./_components/priority-queue-view";
 
 export default function PriorityQueuePage() {
-  redirect("/priority-queue/bug");
+  return <PriorityQueueView variant="all" />;
 }

@@ -26,9 +26,3 @@ DB_PORT = _get_int_env("DB_PORT", 5432)
 DB_NAME = os.getenv("DB_NAME", "Matriz")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
-
-
-def get_connection_string():
-    """Retorna a string de conexão PostgreSQL."""
-    auth = f"{DB_USER}:{DB_PASSWORD}@" if DB_PASSWORD else f"{DB_USER}@"
-    return f"postgresql://{auth}{DB_HOST}:{DB_PORT}/{DB_NAME}"

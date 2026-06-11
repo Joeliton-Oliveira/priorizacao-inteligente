@@ -112,6 +112,8 @@ def mock_status_doc_atualizar():
         patch("db.avaliacao_repo.obter_status_atual_requisito") as m_st,
         patch("services.kanban_gates.obter_documentacao_fases") as m_doc,
         patch("services.kanban_status_service.atualizar_status_requisito") as m_up,
+        patch("services.kanban_gates.obter_limite_wip_coluna", return_value=None),
+        patch("services.kanban_gates.contar_ocupacao_coluna_kanban", return_value=0),
     ):
         yield m_st, m_doc, m_up
 
@@ -347,3 +349,40 @@ def test_mesmo_status_nao_erro(mock_status_doc_atualizar):
     r = client.post(f"/api/v1/requisitos/{RID}/status", json={"status": "AVALIADO"})
     assert r.status_code == 200
     m_up.assert_called_once()
+
+
+def test_avanco_bloqueado_por_wip_coluna_destino(mock_status_doc_atualizar):
+    """DEVELOP → TEST com documentação OK, mas WIP de TEST cheio."""
+    m_st, m_doc, m_up = mock_status_doc_atualizar
+    m_st.return_value = "EM_DESENVOLVIMENTO"
+    f = _fases_vazias()
+    f["doc_requisito"] = _doc_requisito_completo()
+    f["prontidao_dev"] = _prontidao_completa()
+    f["entrega_dev"] = _entrega_completa()
+    m_doc.return_value = f
+    with patch("services.kanban_gates.obter_limite_wip_coluna", return_value=2), patch(
+        "services.kanban_gates.contar_ocupacao_coluna_kanban", return_value=2
+    ):
+        r = client.post(f"/api/v1/requisitos/{RID}/status", json={"status": "EM_TESTE"})
+    assert r.status_code == 422
+    assert "WIP" in r.json().get("detail", "")
+    m_up.assert_not_called()
+
+
+def test_get_gates_inclui_wip_destino_quando_proxima_coluna():
+    f = _fases_vazias()
+    f["doc_requisito"] = _doc_requisito_completo()
+    with (
+        patch("services.kanban_status_service.obter_status_atual_requisito", return_value="BACKLOG"),
+        patch("services.kanban_status_service.obter_documentacao_fases", return_value=f),
+        patch("services.kanban_gates.obter_limite_wip_coluna", return_value=3),
+        patch("services.kanban_gates.contar_ocupacao_coluna_kanban", return_value=1),
+    ):
+        r = client.get(f"/api/v1/kanban/{RID}/gates")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["proxima_coluna"] == "TO DO"
+    assert body["pode_avancar_wip"] is True
+    assert body["wip_destino"]["coluna"] == "TO DO"
+    assert body["wip_destino"]["ocupacao"] == 1
+    assert body["wip_destino"]["limite"] == 3

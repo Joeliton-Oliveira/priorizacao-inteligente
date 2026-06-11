@@ -79,7 +79,11 @@ export function mockAnaliseFromForm(form: ActivityFormData): AnaliseRequisitoRes
       /bug|erro|falha|quebr/i.test(form.description));
 
   const tipo = isBug ? "BUG" : "INCREMENTO";
-  const ctx = form.businessImportance.trim() || form.systemArea.trim() || "geral";
+  const ctx =
+    form.businessImportance.trim() ||
+    form.systemOrProduct.trim() ||
+    form.systemArea.trim() ||
+    "geral";
   const titulo =
     form.description.trim().slice(0, 80) ||
     (tipo === "BUG" ? "Problema reportado" : "Melhoria solicitada");

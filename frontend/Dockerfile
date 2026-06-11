@@ -14,4 +14,4 @@ COPY . .
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "if [ ! -d node_modules/.pnpm ]; then pnpm install --frozen-lockfile; fi && pnpm exec next dev --webpack --hostname 0.0.0.0 --port 3000"]
+CMD ["sh", "-c", "if [ ! -d node_modules/.pnpm ]; then pnpm install --frozen-lockfile; fi && rm -rf .next/* && pnpm exec next build && pnpm exec next start --hostname 0.0.0.0 --port 3000"]

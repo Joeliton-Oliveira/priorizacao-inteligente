@@ -57,7 +57,7 @@ _CHANGELOG_HEADING_RE = re.compile(
 
 
 def format_release_date_br(iso_date: str | None = None) -> str:
-    """Converte YYYY-MM-DD para DD/MM/AAAA (exibição no Dash)."""
+    """Converte YYYY-MM-DD para DD/MM/AAAA para exibição na interface."""
     raw = (iso_date or RELEASE_DATE).strip()
     parts = raw.split("-")
     if len(parts) != 3:

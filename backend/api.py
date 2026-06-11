@@ -2,8 +2,9 @@
 API REST — Matriz de Priorização
 Documentação Swagger em /docs
 """
-from typing import Literal, Optional
-from fastapi import FastAPI, HTTPException, Query
+import os
+from typing import Any, Literal, Optional
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -11,6 +12,8 @@ from domain.exceptions import DomainError
 from version import __version__ as APP_VERSION, RELEASE_DATE, parse_semver
 from services import analise_ia_service
 from services import avaliacao_service
+from services import config_fila_service
+from services import demanda_consulta_service
 from services import documentacao_service
 from services import fila_service
 from services import kanban_status_service
@@ -40,7 +43,15 @@ OPENAPI_TAGS = [
     },
     {
         "name": "Fila de priorização",
-        "description": "Ordenação operacional das atividades avaliadas (bugs vs incrementos, score_final, vazão).",
+        "description": "Ordenação operacional das atividades avaliadas (quadrante, distância ao canto ideal, vazão).",
+    },
+    {
+        "name": "Calibragem",
+        "description": "Leitura e persistência da configuração da fila e dos limites WIP usados no produto.",
+    },
+    {
+        "name": "Demandas - Consulta consolidada",
+        "description": "Visão 360 e auditoria para detalhar uma atividade sem depender de múltiplas telas e chamadas dispersas.",
     },
 ]
 
@@ -338,6 +349,36 @@ def api_historico_versao_projeto(
         raise HTTPException(status_code=500, detail=f"Erro ao listar histórico: {str(e)}")
 
 
+@app.get(
+    "/api/v1/config-fila",
+    tags=["Calibragem"],
+    summary="Obter configuração da fila e WIP",
+    description="Leitura da calibragem operacional usada pela fila e pelos limites WIP do Kanban.",
+)
+def api_get_config_fila():
+    try:
+        return config_fila_service.obter_configuracao()
+    except DomainError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao ler config-fila: {str(e)}")
+
+
+@app.post(
+    "/api/v1/config-fila",
+    tags=["Calibragem"],
+    summary="Salvar configuração da fila e WIP",
+    description="Escrita da calibragem operacional. Campos omitidos são mesclados com os padrões.",
+)
+def api_post_config_fila(body: dict[str, Any] = Body(...)):
+    try:
+        return config_fila_service.salvar_configuracao(body)
+    except DomainError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar config-fila: {str(e)}")
+
+
 @app.post(
     "/api/v1/requisitos/analise",
     response_model=AnaliseRequisitoResponse,
@@ -397,7 +438,7 @@ class AtividadePriorizada(BaseModel):
     coordenada_y: float = Field(..., description="Severidade (bugs) ou Valor (incrementos)")
     score: float = Field(..., description="coordenada_x * coordenada_y")
     prioridade_categorica: str = Field(..., description="ALTA, MEDIA ou BAIXA")
-    status_atual: str = Field(default="AVALIADO", description="Status no fluxo (ex.: AVALIADO, EM_DESENVOLVIMENTO)")
+    status_atual: str = Field(default="BACKLOG", description="Status no fluxo (ex.: BACKLOG, AVALIADO, EM_DESENVOLVIMENTO)")
     id_projeto: Optional[int] = Field(default=None, description="Projeto vinculado na entrada bruta, se houver")
     nome_projeto: Optional[str] = Field(default=None)
     versao_projeto: Optional[str] = Field(default=None, description="versao_atual do projeto no vínculo")
@@ -411,6 +452,21 @@ class AtualizarStatusRequest(BaseModel):
 class DocumentacaoFaseUpdate(BaseModel):
     """Corpo para gravar texto de uma fase (evidências para o Kanban)."""
     conteudo: str = Field(default="", description="Texto livre: RF/RNF, links, critérios de aceite, notas.")
+
+
+class EventoAuditoriaResponse(BaseModel):
+    tipo: str
+    titulo: str
+    descricao: str = ""
+    quando: Optional[str] = None
+    responsavel: Optional[str] = None
+
+
+class AuditoriaDemandaResponse(BaseModel):
+    id_requisito: int
+    titulo: str = ""
+    tipo_requisito: str = ""
+    eventos: list[EventoAuditoriaResponse]
 
 
 @app.get(
@@ -547,6 +603,55 @@ def get_kanban_gates(id_requisito: int):
 
 
 @app.get(
+    "/api/v1/demandas/{id_requisito}/visao-360",
+    tags=["Demandas - Consulta consolidada"],
+    summary="Obter visão 360 da demanda",
+    description="Leitura consolidada da atividade: origem, estruturação da IA, avaliação, documentação e gates.",
+)
+def get_demanda_visao_360(id_requisito: int):
+    try:
+        return demanda_consulta_service.obter_visao_360(id_requisito)
+    except DomainError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao obter visão 360: {str(e)}")
+
+
+@app.get(
+    "/api/v1/demandas/{id_requisito}/auditoria",
+    response_model=AuditoriaDemandaResponse,
+    tags=["Demandas - Consulta consolidada"],
+    summary="Obter auditoria da demanda",
+    description="Leitura consolidada de eventos relevantes da demanda e do projeto associado.",
+)
+def get_demanda_auditoria(id_requisito: int):
+    try:
+        return demanda_consulta_service.obter_auditoria(id_requisito)
+    except DomainError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao obter auditoria: {str(e)}")
+
+
+@app.get(
+    "/api/v1/fila",
+    tags=["Fila de priorização"],
+    summary="Obter fila operacional intercalada",
+    description=(
+        "Fila única para a esteira: ordenação por matriz (quadrante e coordenadas) "
+        "e intercalação bugs/melhorias conforme vazão da config (ex.: 50/50)."
+    ),
+)
+def obter_fila_operacional():
+    try:
+        return fila_service.obter_fila_priorizacao(intercalar=True)
+    except DomainError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao montar fila operacional: {str(e)}")
+
+
+@app.get(
     "/api/v1/fila/bugs",
     tags=["Fila de priorização"],
     summary="Obter fila ordenada de bugs",
@@ -583,6 +688,16 @@ async def _startup_aviso_documentacao():
         "[api] Confirme com: GET http://127.0.0.1:8000/api/v1/ping",
         flush=True,
     )
+    if os.getenv("SEED_INICIAL_ON_STARTUP", "true").strip().lower() in ("1", "true", "yes", "on"):
+        try:
+            from db.seed_runner import executar_seed_inicial_se_necessario
+
+            if executar_seed_inicial_se_necessario():
+                print("[api] Seed inicial aplicado (projetos, bugs e features).", flush=True)
+            else:
+                print("[api] Seed inicial ignorado: já existem projetos no banco.", flush=True)
+        except Exception as exc:
+            print(f"[api] Aviso: seed inicial não executado ({exc}).", flush=True)
 
 
 @app.get(

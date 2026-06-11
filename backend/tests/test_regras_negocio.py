@@ -6,7 +6,7 @@ import pytest
 
 
 def test_matriz_nao_muda_natureza_com_tempo():
-    """Coordenadas X/Y permanecem estáveis; o tempo afeta apenas score_final."""
+    """Coordenadas X/Y e score_base permanecem estáveis; dias_parado é calculado à parte."""
     from fila_priorizacao import montar_fila
     config = {"vazao": {"bugs": 100, "incrementos": 0}, "envelhecimento": {"intervalo_dias": 10, "incremento_base": 1.0, "limite_maximo": None},
               "quadrantes_bug": {"critica_alta": 0.5, "alta_media": 0.8, "media_media": 1.0, "baixa_baixa": 1.3},
@@ -19,7 +19,8 @@ def test_matriz_nao_muda_natureza_com_tempo():
     assert fila[0]["coordenada_x"] == 4
     assert fila[0]["coordenada_y"] == 3
     assert fila[0]["score_base"] == 12
-    assert fila[0]["score_final"] >= 12  # tempo adiciona bônus
+    assert fila[0]["score_final"] == 12
+    assert fila[0]["dias_parado"] > 0
 
 
 def test_quadrante_bug_domina_sobre_score_final():
@@ -44,8 +45,8 @@ def test_quadrante_bug_domina_sobre_score_final():
 
 
 def test_itens_mesmo_quadrante_antigo_sobe_com_tempo(config_fila_padrao):
-    """Mesmas coordenadas (mesmo quadrante e mesma distância): desempate por score_final (tempo, etc.)."""
-    from fila_priorizacao import montar_fila
+    """Mesmo quadrante e mesmo score: desempate por dias_parado DESC."""
+    from fila_priorizacao import montar_duas_filas_completas
     agora = datetime.now(timezone.utc)
     antigo = agora - timedelta(days=80)
     itens = [
@@ -54,12 +55,12 @@ def test_itens_mesmo_quadrante_antigo_sobe_com_tempo(config_fila_padrao):
         {"id": 2, "titulo": "Q1 muito antigo", "tipo_requisito": "BUG", "coordenada_x": 4.0, "coordenada_y": 4.0, "score": 16,
          "prioridade_categorica": "ALTA", "status_atual": "AVALIADO", "data_avaliacao": antigo},
     ]
-    fila = montar_fila(itens, config_fila_padrao)
-    assert len(fila) == 2
-    assert fila[0]["fila_ordem_quadrante"] == fila[1]["fila_ordem_quadrante"] == 1
-    assert fila[0]["fila_distancia_ideal"] == fila[1]["fila_distancia_ideal"]
-    assert fila[0]["id"] == 2  # mais tempo parado → maior score_final → primeiro
-    assert fila[0]["score_final"] >= fila[1]["score_final"]
+    bugs, _ = montar_duas_filas_completas(itens, config_fila_padrao)
+    assert len(bugs) == 2
+    assert bugs[0]["fila_ordem_quadrante"] == bugs[1]["fila_ordem_quadrante"] == 1
+    assert bugs[0]["id"] == 2
+    assert bugs[0]["dias_parado"] > bugs[1]["dias_parado"]
+    assert bugs[0]["score_final"] == bugs[1]["score_final"]
 
 
 def test_bugs_e_incrementos_respeitam_vazao(config_fila_padrao, itens_fila_sinteticos):

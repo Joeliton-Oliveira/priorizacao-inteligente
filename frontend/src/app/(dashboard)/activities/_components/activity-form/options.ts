@@ -1,34 +1,44 @@
 export const DEMAND_TYPE_OPTIONS = [
-  { value: "nao_sei", label: "Não sei informar" },
   { value: "bug", label: "Bug" },
   { value: "feature", label: "Feature" },
-  { value: "melhoria", label: "Melhoria" },
-  { value: "outro", label: "Outro" },
+];
+
+export const IMPACT_OPTIONS = [
+  { value: "nao_impacta", label: "Não impacta operação" },
+  { value: "baixo", label: "Impacto baixo" },
+  { value: "moderado", label: "Impacto moderado" },
+  { value: "alto", label: "Impacto alto" },
+  { value: "operacao_parada", label: "Operação parada" },
 ];
 
 export const FREQUENCY_OPTIONS = [
-  { value: "sempre", label: "Sempre" },
-  { value: "frequentemente", label: "Frequentemente" },
+  { value: "uma_vez", label: "Aconteceu uma vez" },
   { value: "as_vezes", label: "Às vezes" },
-  { value: "raramente", label: "Raramente" },
-  { value: "nunca", label: "Nunca observado" },
+  { value: "frequente", label: "Frequente" },
+  { value: "sempre", label: "Sempre acontece" },
+  { value: "nao_sei", label: "Não sei informar" },
 ];
 
 export const URGENCY_OPTIONS = [
-  { value: "critica", label: "Crítica" },
-  { value: "alta", label: "Alta" },
-  { value: "media", label: "Média" },
   { value: "baixa", label: "Baixa" },
-];
-
-export const TEMPORARY_WORKAROUND_OPTIONS = [
-  { value: "sim", label: "Sim" },
-  { value: "nao", label: "Não" },
-  { value: "nao_sei", label: "Não sei" },
+  { value: "media", label: "Média" },
+  { value: "alta", label: "Alta" },
+  { value: "critica", label: "Crítica" },
 ];
 
 export const FORM_STEPS = [
-  { id: 1, title: "Identificação da Demanda" },
-  { id: 2, title: "Impacto e Priorização" },
-  { id: 3, title: "Contexto" },
+  {
+    id: 1,
+    progressLabel: "Demanda e impacto",
+    title: "1. Descreva a demanda e o impacto",
+    description:
+      "Explique a demanda e informe impacto percebido, frequência de ocorrência e urgência.",
+  },
+  {
+    id: 2,
+    progressLabel: "Resultado e envio",
+    title: "2. Resultado esperado e projeto",
+    description:
+      "Descreva o resultado esperado, vincule o projeto e envie para estruturação automática com IA.",
+  },
 ];

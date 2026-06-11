@@ -11,6 +11,7 @@ describe("activity-form-draft", () => {
     const merged = mergePartialFormData({ description: "Teste" });
     expect(merged.description).toBe("Teste");
     expect(merged.demandType).toBe(INITIAL_ACTIVITY_FORM_DATA.demandType);
+    expect(merged.systemOrProduct).toBe("");
     expect(merged.projectId).toBe("");
   });
 
@@ -52,7 +53,7 @@ describe("activity-form-draft", () => {
       description: "Round trip",
       urgency: "alta",
     };
-    const step = 3;
+    const step = 2;
     const again = parsePersistedDraftJson(serializeDraft(data, step));
     expect(again?.formData).toEqual(data);
     expect(again?.step).toBe(step);

@@ -55,6 +55,14 @@ def test_vazao_soma_100():
     assert bugs + incrementos == 100
 
 
+def test_normalizar_vazao_limita_0_100():
+    from config_fila import _normalizar_vazao
+
+    assert _normalizar_vazao({"bugs": 720, "incrementos": 0}) == {"bugs": 100, "incrementos": 0}
+    assert _normalizar_vazao({"bugs": -5, "incrementos": 105}) == {"bugs": 0, "incrementos": 100}
+    assert _normalizar_vazao({"bugs": 2, "incrementos": 98}) == {"bugs": 2, "incrementos": 98}
+
+
 def test_envelhecimento_intervalo_incremento():
     """Envelhecimento: intervalo_dias, incremento_base, limite_maximo opcional."""
     from config_fila import CONFIG_FILA

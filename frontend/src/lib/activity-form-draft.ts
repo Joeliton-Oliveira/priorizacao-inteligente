@@ -8,16 +8,17 @@ export interface ActivityFormData {
   frequency: string;
   urgency: string;
   temporaryWorkaround: string;
+  systemOrProduct: string;
   projectId: string;
   requesterId: string;
 }
 
 export const ACTIVITY_FORM_STORAGE_KEY = "intelli-reqs:activity-form-draft";
-export const MAX_ACTIVITY_FORM_STEP = 3;
+export const MAX_ACTIVITY_FORM_STEP = 2;
 
 export const INITIAL_ACTIVITY_FORM_DATA: ActivityFormData = {
   description: "",
-  demandType: "nao_sei",
+  demandType: "",
   systemArea: "",
   businessImportance: "",
   expectedResult: "",
@@ -25,6 +26,7 @@ export const INITIAL_ACTIVITY_FORM_DATA: ActivityFormData = {
   frequency: "",
   urgency: "",
   temporaryWorkaround: "",
+  systemOrProduct: "",
   projectId: "",
   requesterId: "",
 };
@@ -38,7 +40,13 @@ export function mergePartialFormData(
   partial: Partial<ActivityFormData> | undefined
 ): ActivityFormData {
   if (!partial || typeof partial !== "object") return { ...INITIAL_ACTIVITY_FORM_DATA };
-  return { ...INITIAL_ACTIVITY_FORM_DATA, ...partial };
+
+  const merged = { ...INITIAL_ACTIVITY_FORM_DATA, ...partial };
+  if (merged.demandType !== "bug" && merged.demandType !== "feature") {
+    merged.demandType = "";
+  }
+
+  return merged;
 }
 
 export function parsePersistedDraftJson(

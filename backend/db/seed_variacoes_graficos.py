@@ -417,7 +417,7 @@ def main(reset: bool, append: bool, quantidade: int) -> None:
     ids_criados.extend(_inserir_lote(id_projeto, "INCREMENTO", titulos_inc, alvos_inc, rng, offset))
 
     print(f"\nConcluído: {quantidade} bugs + {quantidade} incrementos ({len(ids_criados)} novos itens).")
-    print("Recarregue http://127.0.0.1:8051/atividades")
+    print("Recarregue http://localhost:3000/activities")
 
 
 if __name__ == "__main__":

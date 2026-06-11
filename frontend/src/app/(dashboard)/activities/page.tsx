@@ -1,31 +1,131 @@
 "use client";
 
-import { ActivityMatricesGrid } from "./_components/activity-matrices-grid";
+import { useEffect, useMemo, useState } from "react";
+import { ActivitiesPageHeader } from "./_components/activities-page-header";
+import { ActivitySummaryCards } from "./_components/activity-summary-cards";
+import { ActivityMatrixScatter } from "./_components/activity-matrix-scatter";
+import { ActivityBugQuadrantBars } from "./_components/activity-bug-quadrant-bars";
+import { ActivityIncrementQuadrantBars } from "./_components/activity-increment-quadrant-bars";
 import {
-  ActivitySummaryCards,
-  type ActivitySummaryStats,
-} from "./_components/activity-summary-cards";
-import {
-  MOCK_BUGS_MATRIX,
-  MOCK_INCREMENTS_MATRIX,
-} from "./_components/mock-matrix-data";
+  BUG_MATRIX_QUADRANTS,
+  INCREMENT_MATRIX_QUADRANTS,
+} from "./_components/matrix-chart-quadrants";
+import type { AtividadePriorizada, MatrixPoint } from "@/lib/priorizacao/types";
 
-/** Valores de exemplo até integração com a API de atividades. */
-const MOCK_SUMMARY: ActivitySummaryStats = {
-  bugs: MOCK_BUGS_MATRIX.length,
-  incrementos: MOCK_INCREMENTS_MATRIX.length,
-  concluidas: 0,
-  pendentesVisao: MOCK_BUGS_MATRIX.length + MOCK_INCREMENTS_MATRIX.length,
-};
+const DONE_STATUSES = new Set(["DONE", "CONCLUIDO"]);
+
+function toMatrixPoint(item: AtividadePriorizada): MatrixPoint {
+  return {
+    x: item.coordenada_x,
+    y: item.coordenada_y,
+    titulo: item.titulo,
+  };
+}
 
 export default function ActivitiesPage() {
+  const [items, setItems] = useState<AtividadePriorizada[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadActivities() {
+      try {
+        setIsLoading(true);
+        setErrorMessage(null);
+        const response = await fetch("/api/priorizacao/atividades", { cache: "no-store" });
+        const data = await response.json().catch(() => []);
+        if (!response.ok) {
+          throw new Error(
+            data && typeof data === "object" && "detail" in data && typeof data.detail === "string"
+              ? data.detail
+              : "Não foi possível carregar as atividades.",
+          );
+        }
+        if (!cancelled) {
+          setItems(Array.isArray(data) ? (data as AtividadePriorizada[]) : []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(
+            error instanceof Error ? error.message : "Não foi possível carregar as atividades.",
+          );
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    loadActivities();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const bugPoints = useMemo(
+    () => items.filter((item) => item.tipo_requisito === "BUG").map(toMatrixPoint),
+    [items],
+  );
+  const incrementPoints = useMemo(
+    () => items.filter((item) => item.tipo_requisito !== "BUG").map(toMatrixPoint),
+    [items],
+  );
+
+  const stats = useMemo(
+    () => ({
+      bugs: items.filter((item) => item.tipo_requisito === "BUG").length,
+      incrementos: items.filter((item) => item.tipo_requisito !== "BUG").length,
+      concluidas: items.filter((item) =>
+        DONE_STATUSES.has((item.status_atual || "").toUpperCase()),
+      ).length,
+      pendentesVisao: items.filter(
+        (item) => !DONE_STATUSES.has((item.status_atual || "").toUpperCase()),
+      ).length,
+    }),
+    [items],
+  );
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Matrizes de Atividades</h1>
+    <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6 pb-8">
+      <ActivitiesPageHeader />
 
-      <ActivitySummaryCards stats={MOCK_SUMMARY} />
+      {errorMessage ? (
+        <p className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-red-400">
+          {errorMessage}
+        </p>
+      ) : null}
 
-      <ActivityMatricesGrid />
+      <ActivitySummaryCards stats={stats} />
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
+        <ActivityMatrixScatter
+          title="Matriz de BUGs"
+          xLabel="Criticidade"
+          yLabel="Severidade"
+          color="#ef4444"
+          data={bugPoints}
+          quadrants={BUG_MATRIX_QUADRANTS}
+          emptyMessage={isLoading ? "Carregando matriz..." : "Nenhum bug encontrado."}
+          itemLabel={{ singular: "bug", plural: "bugs" }}
+        />
+        <ActivityMatrixScatter
+          title="Matriz de INCREMENTOs"
+          xLabel="Esforço"
+          yLabel="Valor"
+          color="#3b82f6"
+          data={incrementPoints}
+          quadrants={INCREMENT_MATRIX_QUADRANTS}
+          emptyMessage={isLoading ? "Carregando matriz..." : "Nenhum incremento encontrado."}
+          itemLabel={{ singular: "incremento", plural: "incrementos" }}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
+        <ActivityBugQuadrantBars data={bugPoints} />
+        <ActivityIncrementQuadrantBars data={incrementPoints} />
+      </div>
     </div>
   );
 }

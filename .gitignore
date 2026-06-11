@@ -28,6 +28,13 @@ coverage/
 .DS_Store
 .idea/
 .vscode/
+.cursor/
 
 # Logs
 *.log
+
+# Lockfile npm (projeto usa pnpm no frontend)
+package-lock.json
+
+# Cache Python local fora do padrão __pycache__
+.pycache/

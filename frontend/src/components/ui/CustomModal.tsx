@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 type CustomModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  title: string;
+  title: React.ReactNode;
   description?: string;
   contentClassName?: string;
   children: React.ReactNode;

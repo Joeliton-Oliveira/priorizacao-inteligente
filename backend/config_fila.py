@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Configuração da fila de priorização (calibragem).
-UI de calibragem: rota /calibragem no Dash (README.md).
+Consumida pela API e pela interface atual em Next.js.
 Carrega de config_fila.json se existir; senão usa os padrões abaixo.
 """
 import json
@@ -45,7 +45,7 @@ CONFIG_FILA: dict[str, Any] = {
         "preenchimento": 1.0,
         "desperdicio": 0.7,
     },
-    # Limites WIP do Kanban (mesmas chaves que app.py / _wip_limits)
+    # Limites WIP do Kanban consumidos pela API e pelo frontend atual.
     "wip": {"TO_DO": 5, "DEVELOP": 2, "TEST": 2, "DEPLOY": 1},
 }
 
@@ -66,14 +66,31 @@ def get_config_fila() -> dict[str, Any]:
         try:
             with open(CONFIG_FILA_JSON, "r", encoding="utf-8") as f:
                 loaded = json.load(f)
-            return _merge_deep(CONFIG_FILA, loaded)
+            merged = _merge_deep(CONFIG_FILA, loaded)
+            merged["vazao"] = _normalizar_vazao(merged.get("vazao"))
+            return merged
         except Exception:
             pass
-    return copy.deepcopy(CONFIG_FILA)
+    out = copy.deepcopy(CONFIG_FILA)
+    out["vazao"] = _normalizar_vazao(out.get("vazao"))
+    return out
+
+
+def _normalizar_vazao(vazao: dict[str, Any] | None) -> dict[str, int]:
+    """Garante percentuais de bugs entre 0 e 100; melhorias completam 100%."""
+    if not vazao:
+        return {"bugs": 60, "incrementos": 40}
+    try:
+        bugs = int(round(float(vazao.get("bugs", 60))))
+    except (TypeError, ValueError):
+        bugs = 60
+    bugs = max(0, min(100, bugs))
+    return {"bugs": bugs, "incrementos": 100 - bugs}
 
 
 def save_config_fila(config: dict[str, Any]) -> None:
     """Salva a configuração em config_fila.json."""
     merged = _merge_deep(CONFIG_FILA, config)
+    merged["vazao"] = _normalizar_vazao(merged.get("vazao"))
     with open(CONFIG_FILA_JSON, "w", encoding="utf-8") as f:
         json.dump(merged, f, indent=2, ensure_ascii=False)

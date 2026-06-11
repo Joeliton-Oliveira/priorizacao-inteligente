@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import type { AnaliseRequisitoResponse } from "@/lib/priorizacao/types";
 
 type AiAnalysisStepProps = {
@@ -52,7 +53,7 @@ export function AiAnalysisStep({
         <CardHeader className="pb-2">
           <div className="flex flex-wrap items-center gap-2">
             <span className="flex size-7 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-              2
+              IA
             </span>
             <h2 className="text-base font-semibold">Demanda estruturada pela IA</h2>
           </div>
@@ -91,7 +92,7 @@ export function AiAnalysisStep({
         <CardHeader className="pb-2">
           <div className="flex flex-wrap items-center gap-2">
             <span className="flex size-7 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-              3
+              AV
             </span>
             <h2 className="text-base font-semibold">Avaliação da prioridade</h2>
           </div>
@@ -113,34 +114,39 @@ export function AiAnalysisStep({
               <CardContent className="space-y-3 pt-4">
                 <div>
                   <p className="text-sm font-medium leading-snug">
-                    <span className="font-bold">P{index + 1}</span> {pergunta.texto}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    [{pergunta.dimensao}]
+                    {pergunta.texto}
                   </p>
                 </div>
-                <fieldset className="space-y-2">
+                <RadioGroup
+                  value={
+                    answers[pergunta.id_pergunta] !== undefined
+                      ? String(answers[pergunta.id_pergunta])
+                      : undefined
+                  }
+                  onValueChange={(value) =>
+                    onAnswerChange(pergunta.id_pergunta, Number(value))
+                  }
+                  className="space-y-2"
+                >
                   {pergunta.opcoes_resposta.map((opcao) => (
-                    <label
+                    <div
                       key={opcao.valor}
-                      className="flex cursor-pointer items-start gap-2 text-sm"
+                      className="flex items-start gap-2 text-sm"
                     >
-                      <input
-                        type="radio"
-                        name={`pergunta-${pergunta.id_pergunta}`}
-                        value={opcao.valor}
-                        checked={answers[pergunta.id_pergunta] === opcao.valor}
-                        onChange={() =>
-                          onAnswerChange(pergunta.id_pergunta, opcao.valor)
-                        }
+                      <RadioGroupItem
+                        id={`pergunta-${pergunta.id_pergunta}-opcao-${opcao.valor}`}
+                        value={String(opcao.valor)}
                         className="mt-1"
                       />
-                      <span>
-                        {opcao.rotulo} ({opcao.valor})
-                      </span>
-                    </label>
+                      <Label
+                        htmlFor={`pergunta-${pergunta.id_pergunta}-opcao-${opcao.valor}`}
+                        className="cursor-pointer font-normal leading-relaxed"
+                      >
+                        {opcao.rotulo}
+                      </Label>
+                    </div>
                   ))}
-                </fieldset>
+                </RadioGroup>
               </CardContent>
             </Card>
           ))}
