@@ -108,6 +108,7 @@ export default function ActivitiesPage() {
           data={bugPoints}
           quadrants={BUG_MATRIX_QUADRANTS}
           emptyMessage={isLoading ? "Carregando matriz..." : "Nenhum bug encontrado."}
+          itemKind="bug"
           itemLabel={{ singular: "bug", plural: "bugs" }}
         />
         <ActivityMatrixScatter
@@ -118,6 +119,7 @@ export default function ActivitiesPage() {
           data={incrementPoints}
           quadrants={INCREMENT_MATRIX_QUADRANTS}
           emptyMessage={isLoading ? "Carregando matriz..." : "Nenhum incremento encontrado."}
+          itemKind="increment"
           itemLabel={{ singular: "incremento", plural: "incrementos" }}
         />
       </div>

@@ -38,6 +38,7 @@ export function ActivityMatricesGrid() {
           data={bugs}
           quadrants={BUG_MATRIX_QUADRANTS}
           emptyMessage="Nenhum bug na seleção atual (ajuste os filtros)."
+          itemKind="bug"
           itemLabel={{ singular: "bug", plural: "bugs" }}
         />
         <ActivityBugQuadrantBars data={bugs} />
@@ -51,6 +52,7 @@ export function ActivityMatricesGrid() {
           data={incrementos}
           quadrants={INCREMENT_MATRIX_QUADRANTS}
           emptyMessage="Nenhum incremento na seleção atual (ajuste os filtros)."
+          itemKind="increment"
           itemLabel={{ singular: "incremento", plural: "incrementos" }}
         />
         <ActivityIncrementQuadrantBars data={incrementos} />

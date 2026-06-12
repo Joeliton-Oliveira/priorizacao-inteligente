@@ -28,6 +28,7 @@ from db.seed_variacoes_graficos import (
     PERGUNTAS_VAL,
     _gerar_alvos,
     _montar_respostas,
+    _tabela_existe,
 )
 
 SEED_TAG = "seed_inicial"
@@ -41,36 +42,50 @@ CONTEXTO = (
 # status_atual gravado em status_requisito (valores da API / kanban_gates)
 STATUS_PADRAO = "BACKLOG"
 
+# Índices (0-based) na lista de bugs do seed que compartilham a mesma matriz
+BUG_INDICES_MESMA_MATRIZ = (0, 1)
+
+NOMES_PROJETOS_SEED = (
+    "Portal Acadêmico",
+    "Priorização Inteligente",
+    "Integração Financeira",
+)
+
 PROJETOS: list[dict] = [
     {
         "nome_projeto": "Portal Acadêmico",
         "tipo_origem": "existente",
         "versao_atual": "2.4.0",
         "descricao": "Autoatendimento e consultas acadêmicas para alunos.",
+        "responsavel": "Mariana Costa",
         "demandas": [
             {
                 "titulo": "Erro 500 ao exportar histórico de notas",
                 "tipo": "BUG",
                 "status": "BACKLOG",
                 "texto": "Ao exportar PDF do histórico, a API retorna erro interno.",
+                "avaliador": "Lucas Ferreira",
             },
             {
                 "titulo": "Filtro de disciplinas não persiste após logout",
                 "tipo": "BUG",
                 "status": "AVALIADO",
                 "texto": "Preferências de filtro somem ao encerrar a sessão.",
+                "avaliador": "Ana Paula Ribeiro",
             },
             {
                 "titulo": "Dashboard de desempenho do aluno",
                 "tipo": "INCREMENTO",
                 "status": "BACKLOG",
                 "texto": "Painel com médias, frequência e alertas de reprovação.",
+                "avaliador": "Thiago Nunes",
             },
             {
                 "titulo": "Notificações push de prazos de entrega",
                 "tipo": "INCREMENTO",
                 "status": "EM_DESENVOLVIMENTO",
                 "texto": "Alertas configuráveis para trabalhos e provas.",
+                "avaliador": "Camila Duarte",
             },
         ],
     },
@@ -79,30 +94,35 @@ PROJETOS: list[dict] = [
         "tipo_origem": "novo",
         "versao_atual": None,
         "descricao": "Este produto: matriz, filas e Kanban de requisitos.",
+        "responsavel": "Rafael Mendes",
         "demandas": [
             {
                 "titulo": "Validação WIP não bloqueia drag no Kanban",
                 "tipo": "BUG",
                 "status": "BACKLOG",
                 "texto": "É possível exceder o limite WIP ao arrastar cards.",
+                "avaliador": "Juliana Prado",
             },
             {
                 "titulo": "Toast duplicado ao mover card na esteira",
                 "tipo": "BUG",
                 "status": "EM_TESTE",
                 "texto": "Sucesso aparece em banner e toast ao mesmo tempo.",
+                "avaliador": "Ricardo Souza",
             },
             {
                 "titulo": "Fila intercalada bugs e melhorias",
                 "tipo": "INCREMENTO",
                 "status": "AVALIADO",
                 "texto": "Montagem da fila respeitando percentual de vazão configurado.",
+                "avaliador": "Fernanda Lima",
             },
             {
                 "titulo": "Matriz de priorização em tempo real",
                 "tipo": "INCREMENTO",
                 "status": "BACKLOG",
                 "texto": "Gráficos de bugs e incrementos alimentados pela API.",
+                "avaliador": "Rafael Mendes",
             },
         ],
     },
@@ -111,30 +131,35 @@ PROJETOS: list[dict] = [
         "tipo_origem": "existente",
         "versao_atual": "1.2.0",
         "descricao": "Cobrança, boletos e conciliação com ERP.",
+        "responsavel": "Beatriz Almeida",
         "demandas": [
             {
                 "titulo": "Duplicidade de boletos na conciliação",
                 "tipo": "BUG",
                 "status": "BACKLOG",
                 "texto": "Mesmo título aparece duas vezes no lote diário.",
+                "avaliador": "Gustavo Martins",
             },
             {
                 "titulo": "Timeout na consulta de saldo em horário de pico",
                 "tipo": "BUG",
                 "status": "EM_HOMOLOGACAO",
                 "texto": "Consulta demora mais de 30s entre 18h e 20h.",
+                "avaliador": "Patrícia Gomes",
             },
             {
                 "titulo": "Relatório de inadimplência por curso",
                 "tipo": "INCREMENTO",
                 "status": "BACKLOG",
                 "texto": "Visão consolidada para coordenação financeira.",
+                "avaliador": "Diego Cardoso",
             },
             {
                 "titulo": "API de pagamentos PIX com webhook",
                 "tipo": "INCREMENTO",
                 "status": "BACKLOG",
                 "texto": "Confirmação automática de pagamento via callback.",
+                "avaliador": "Beatriz Almeida",
             },
         ],
     },
@@ -190,6 +215,7 @@ def _inserir_demanda(
         )
 
     texto = spec.get("texto") or spec["titulo"]
+    avaliador = (spec.get("avaliador") or "Analista de requisitos").strip()
     out = salvar_avaliacao_completa(
         texto_original=f"[{nome_projeto}] {texto}",
         titulo_requisito=spec["titulo"],
@@ -197,7 +223,7 @@ def _inserir_demanda(
         tipo_requisito=tipo,
         objetivo="Atender a necessidade registrada no cadastro de demonstração.",
         finalidade="Alimentar priorização, matriz e esteira do ambiente inicial.",
-        usuario_avaliador=SEED_TAG,
+        usuario_avaliador=avaliador,
         perfil_avaliador="analista",
         respostas=respostas,
         cadastro={
@@ -215,24 +241,86 @@ def _inserir_demanda(
     return id_requisito
 
 
+def _ids_projetos_seed(cur) -> list[int]:
+    cur.execute(
+        """
+        SELECT DISTINCT id_projeto FROM (
+            SELECT eb.id_projeto
+            FROM entrada_bruta eb
+            WHERE eb.dados_cadastro_json->>'origem_seed' = %s
+            UNION
+            SELECT id_projeto FROM projeto WHERE nome_projeto = ANY(%s)
+        ) AS alvo
+        """,
+        (SEED_TAG, list(NOMES_PROJETOS_SEED)),
+    )
+    return [row[0] for row in cur.fetchall()]
+
+
+def _remover_requisitos(cur, req_ids: list[int]) -> None:
+    if not req_ids:
+        return
+    cur.execute(
+        "DELETE FROM resposta_avaliacao WHERE id_avaliacao IN "
+        "(SELECT id_avaliacao FROM avaliacao_requisito WHERE id_requisito = ANY(%s))",
+        (req_ids,),
+    )
+    cur.execute(
+        "DELETE FROM avaliacao_requisito WHERE id_requisito = ANY(%s)",
+        (req_ids,),
+    )
+    if _tabela_existe(cur, "status_requisito"):
+        cur.execute(
+            "DELETE FROM status_requisito WHERE id_requisito = ANY(%s)",
+            (req_ids,),
+        )
+    if _tabela_existe(cur, "requisito_doc_fase"):
+        cur.execute(
+            "DELETE FROM requisito_doc_fase WHERE id_requisito = ANY(%s)",
+            (req_ids,),
+        )
+    cur.execute(
+        "DELETE FROM requisito_estruturado WHERE id_requisito = ANY(%s)",
+        (req_ids,),
+    )
+
+
 def _limpar_seed_anterior() -> None:
-    """Remove projetos criados por este seed (cascade nas FKs de demanda)."""
+    """Remove demandas e projetos criados por este seed (ordem respeita FK RESTRICT)."""
     conn = get_connection()
     try:
         with conn.cursor() as cur:
+            projeto_ids = _ids_projetos_seed(cur)
+            if not projeto_ids:
+                conn.commit()
+                return
+
+            # Apaga todas as demandas dos projetos do seed (não só as com tag),
+            # pois entrada_bruta bloqueia DELETE em projeto via RESTRICT.
             cur.execute(
                 """
-                DELETE FROM projeto
-                WHERE id_projeto IN (
-                    SELECT DISTINCT eb.id_projeto
-                    FROM entrada_bruta eb
-                    WHERE eb.usuario_criacao = %s
-                       OR eb.dados_cadastro_json->>'origem_seed' = %s
-                )
+                SELECT r.id_requisito
+                FROM requisito_estruturado r
+                JOIN entrada_bruta eb ON eb.id_entrada_bruta = r.id_entrada_bruta
+                WHERE eb.id_projeto = ANY(%s)
                 """,
-                (SEED_TAG, SEED_TAG),
+                (projeto_ids,),
+            )
+            req_ids = [row[0] for row in cur.fetchall()]
+            _remover_requisitos(cur, req_ids)
+
+            cur.execute(
+                "DELETE FROM entrada_bruta WHERE id_projeto = ANY(%s)",
+                (projeto_ids,),
+            )
+            cur.execute(
+                "DELETE FROM projeto WHERE id_projeto = ANY(%s)",
+                (projeto_ids,),
             )
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -253,6 +341,20 @@ def executar_seed(force: bool = False) -> dict[str, int]:
     total_inc = sum(1 for p in PROJETOS for d in p["demandas"] if d["tipo"] == "INCREMENTO")
     alvos_bug = _gerar_alvos(total_bugs, rng, ocupados_bug)
     alvos_inc = _gerar_alvos(total_inc, rng, ocupados_inc)
+    titulos_bug = [
+        d["titulo"]
+        for p in PROJETOS
+        for d in p["demandas"]
+        if d["tipo"] == "BUG"
+    ]
+    if len(alvos_bug) > max(BUG_INDICES_MESMA_MATRIZ):
+        ref, dup = BUG_INDICES_MESMA_MATRIZ
+        alvos_bug[dup] = alvos_bug[ref]
+        ax, ay, _, _ = alvos_bug[ref]
+        print(
+            f"Bugs «{titulos_bug[ref]}» e «{titulos_bug[dup]}» "
+            f"compartilham matriz (criticidade={ax}, severidade={ay})\n"
+        )
     idx_bug = 0
     idx_inc = 0
 
@@ -266,7 +368,7 @@ def executar_seed(force: bool = False) -> dict[str, int]:
             nome_projeto=spec_proj["nome_projeto"],
             tipo_origem=spec_proj["tipo_origem"],
             descricao=spec_proj["descricao"],
-            responsavel=SEED_TAG,
+            responsavel=spec_proj.get("responsavel"),
             versao_atual_informada=spec_proj.get("versao_atual"),
             status_projeto="ativo",
         )
@@ -278,8 +380,16 @@ def executar_seed(force: bool = False) -> dict[str, int]:
         )
 
         for spec_dem in spec_proj["demandas"]:
+            matriz_nota = ""
             if spec_dem["tipo"] == "BUG":
                 alvo = alvos_bug[idx_bug]
+                if idx_bug == BUG_INDICES_MESMA_MATRIZ[1]:
+                    ref_titulo = titulos_bug[BUG_INDICES_MESMA_MATRIZ[0]]
+                    ax, ay, _, _ = alvo
+                    matriz_nota = (
+                        f" [mesma matriz que «{ref_titulo}»: "
+                        f"criticidade={ax}, severidade={ay}]"
+                    )
                 idx_bug += 1
             else:
                 alvo = alvos_inc[idx_inc]
@@ -288,7 +398,7 @@ def executar_seed(force: bool = False) -> dict[str, int]:
             demandas_criadas += 1
             print(
                 f"  {spec_dem['tipo']:10} id={rid} status={spec_dem.get('status', STATUS_PADRAO)} "
-                f"→ {spec_dem['titulo'][:56]}"
+                f"→ {spec_dem['titulo'][:56]}{matriz_nota}"
             )
         print()
 

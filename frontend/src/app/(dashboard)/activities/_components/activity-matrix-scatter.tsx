@@ -1,5 +1,6 @@
 "use client";
 
+import { Bug, Layers, type LucideIcon } from "lucide-react";
 import { useMemo } from "react";
 import {
   CartesianGrid,
@@ -25,6 +26,24 @@ const PLOT_INSET = { top: 12, right: 16, bottom: 36, left: 44 };
 
 const QUADRANT_SLOTS = ["topLeft", "topRight", "bottomLeft", "bottomRight"] as const;
 
+type MatrixItemKind = "bug" | "increment";
+
+const ITEM_KIND_STYLES: Record<
+  MatrixItemKind,
+  { Icon: LucideIcon; iconWrapClass: string; iconClass: string }
+> = {
+  bug: {
+    Icon: Bug,
+    iconWrapClass: "bg-red-500/15 ring-red-500/25",
+    iconClass: "text-red-400",
+  },
+  increment: {
+    Icon: Layers,
+    iconWrapClass: "bg-blue-500/15 ring-blue-500/25",
+    iconClass: "text-blue-400",
+  },
+};
+
 type ActivityMatrixScatterProps = {
   title: string;
   xLabel: string;
@@ -33,6 +52,7 @@ type ActivityMatrixScatterProps = {
   data: MatrixPoint[];
   emptyMessage: string;
   quadrants: MatrixQuadrantConfig;
+  itemKind: MatrixItemKind;
   itemLabel: {
     singular: string;
     plural: string;
@@ -57,33 +77,70 @@ function MatrixTooltip({
   payload,
   xLabel,
   yLabel,
-  itemLabel,
+  accentColor,
+  itemKind,
 }: {
   active?: boolean;
   payload?: TooltipPayload[];
   xLabel: string;
   yLabel: string;
-  itemLabel: { singular: string; plural: string };
+  accentColor: string;
+  itemKind: MatrixItemKind;
 }) {
   if (!active || !payload?.length) return null;
   const point = payload[0]?.payload;
   if (!point) return null;
 
+  const { Icon, iconWrapClass, iconClass } = ITEM_KIND_STYLES[itemKind];
+
   return (
-    <div className="rounded-lg border border-white/10 bg-card/95 px-3 py-2 text-sm shadow-xl backdrop-blur-sm">
-      <p className="font-medium">
-        {point.duplicateCount}{" "}
-        {point.duplicateCount > 1 ? itemLabel.plural : itemLabel.singular} neste ponto
-      </p>
-      <p className="text-muted-foreground">
-        {xLabel}: {point.x} · {yLabel}: {point.y}
-      </p>
-      <div className="mt-2 max-h-32 space-y-1 overflow-y-auto">
-        {point.titulos.map((titulo) => (
-          <p key={titulo} className="text-xs text-muted-foreground">
-            · {titulo}
-          </p>
+    <div
+      className="relative isolate max-w-[min(calc(100vw-2rem),18rem)] overflow-hidden rounded-2xl border border-white/20 bg-background/45 shadow-[0_8px_32px_rgba(0,0,0,0.45)] ring-1 ring-white/10 backdrop-blur-2xl backdrop-saturate-150 sm:max-w-xs"
+      style={{ borderLeftWidth: 3, borderLeftColor: accentColor }}
+    >
+      <div
+        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/14 via-white/5 to-white/[0.02]"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent"
+        aria-hidden
+      />
+
+      <div className="relative z-10 max-h-40 space-y-0 overflow-y-auto overscroll-contain px-3 py-2.5 sm:max-h-48 sm:px-3.5 sm:py-3">
+        {point.titulos.map((titulo, index) => (
+          <div
+            key={`${titulo}-${index}`}
+            className={cn(
+              "flex gap-2.5",
+              index > 0 && "mt-2.5 border-t border-white/15 pt-2.5",
+            )}
+          >
+            <div
+              className={cn(
+                "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-background/50 ring-1 ring-inset backdrop-blur-sm",
+                iconWrapClass,
+              )}
+              aria-hidden
+            >
+              <Icon className={cn("size-3.5", iconClass)} />
+            </div>
+            <p className="min-w-0 flex-1 text-sm font-semibold leading-snug tracking-tight text-foreground drop-shadow-sm">
+              {titulo}
+            </p>
+          </div>
         ))}
+      </div>
+
+      <div className="relative z-10 flex flex-wrap gap-1.5 border-t border-white/15 bg-background/55 px-3 py-2 backdrop-blur-md sm:px-3.5">
+        <span className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-background/70 px-2 py-0.5 text-[11px] shadow-sm backdrop-blur-sm sm:text-xs">
+          <span className="text-muted-foreground">{xLabel}</span>
+          <span className="font-semibold tabular-nums text-foreground">{point.x}</span>
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-background/70 px-2 py-0.5 text-[11px] shadow-sm backdrop-blur-sm sm:text-xs">
+          <span className="text-muted-foreground">{yLabel}</span>
+          <span className="font-semibold tabular-nums text-foreground">{point.y}</span>
+        </span>
       </div>
     </div>
   );
@@ -129,6 +186,7 @@ export function ActivityMatrixScatter({
   data,
   emptyMessage,
   quadrants,
+  itemKind,
   itemLabel,
 }: ActivityMatrixScatterProps) {
   const scatterData = useMemo(() => {
@@ -235,8 +293,20 @@ export function ActivityMatrixScatter({
                 {!isEmpty ? (
                   <Tooltip
                     cursor={{ strokeDasharray: "4 4", stroke: "rgba(255,255,255,0.25)" }}
+                    wrapperStyle={{ outline: "none", zIndex: 50 }}
+                    contentStyle={{
+                      background: "transparent",
+                      border: "none",
+                      padding: 0,
+                      boxShadow: "none",
+                    }}
                     content={
-                      <MatrixTooltip xLabel={xLabel} yLabel={yLabel} itemLabel={itemLabel} />
+                      <MatrixTooltip
+                        xLabel={xLabel}
+                        yLabel={yLabel}
+                        accentColor={color}
+                        itemKind={itemKind}
+                      />
                     }
                   />
                 ) : null}
