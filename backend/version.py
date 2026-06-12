@@ -43,8 +43,8 @@ import re
 from datetime import date
 from pathlib import Path
 
-__version__ = "1.0.0"
-RELEASE_DATE = "2026-04-02"
+__version__ = "1.1.0"
+RELEASE_DATE = "2026-06-11"
 
 _VERSION_RE = re.compile(r'^(__version__\s*=\s*")([^"]+)(")', re.MULTILINE)
 _RELEASE_RE = re.compile(r'^(RELEASE_DATE\s*=\s*")([^"]+)(")', re.MULTILINE)

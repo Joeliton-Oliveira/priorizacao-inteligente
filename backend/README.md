@@ -62,6 +62,12 @@ A suíte cobre API, fila, calibragem, regras de negócio, projetos e o fluxo pri
 
 Histórico alinhado a `version.py` (`changelog_alinhado_com_version_py` lê este arquivo).
 
+## [1.1.0] — 2026-06-11
+
+- Seed inicial: dois bugs com mesma criticidade/severidade para demonstrar sobreposição na matriz.
+- Seed inicial: responsáveis e avaliadores com nomes fictícios; `--force` recria dados sem violar FKs.
+- Matriz de atividades: tooltip com títulos destacados, ícones de bug/incremento e efeito glass.
+
 ## [1.0.0] — 2026-04-02
 
 - Estrutura da aplicação: cadastro, IA, Likert, matriz, fila automática, Kanban, projetos, rota `/fila`, filtros em atividades, mensagens no Kanban, vínculo projeto ↔ demanda.
@@ -69,4 +75,4 @@ Histórico alinhado a `version.py` (`changelog_alinhado_com_version_py` lê este
 - Teste automático do formato semântico da versão.
 - Documentação operacional centralizada no `README.md` da raiz e neste `README.md` do backend.
 
-<!-- Próximo release: adicionar ## [1.0.1] — AAAA-MM-DD com bullets (dois # antes do colchete). -->
+<!-- Próximo release: adicionar ## [x.y.z] — AAAA-MM-DD com bullets (dois # antes do colchete). -->
